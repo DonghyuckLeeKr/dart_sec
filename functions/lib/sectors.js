@@ -71,11 +71,13 @@ export function sectorNames() {
   return Object.keys(SECTORS);
 }
 
-export function resolveCompanies(sector, limit) {
+export function resolveCompanies(sector, limit, offset = 0) {
   const entry = SECTORS[sector];
   if (!entry) {
     throw new Error(`알 수 없는 섹터입니다: ${sector}`);
   }
   const count = Number(limit || 0);
-  return count > 0 ? entry.companies.slice(0, count) : entry.companies.slice();
+  const start = Math.max(Number(offset || 0), 0);
+  const rows = entry.companies.slice(start);
+  return count > 0 ? rows.slice(0, count) : rows;
 }

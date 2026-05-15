@@ -89,7 +89,7 @@ export async function listSectorFilings(apiKey, { sector = "securities", days = 
 
 export async function analyzeSector(apiKey, payload) {
   const sector = payload.sector || "securities";
-  const companies = resolveCompanies(sector, payload.limit);
+  const companies = resolveCompanies(sector, payload.limit, payload.offset);
   const years = normalizeYears(payload.years);
   const reports = normalizeReports(payload.reports);
   const fsDiv = payload.fsDiv || "CFS";
@@ -132,6 +132,7 @@ export async function analyzeSector(apiKey, payload) {
   return {
     sector,
     companyCount: companies.length,
+    offset: Number(payload.offset || 0),
     years,
     reports,
     fsDiv,

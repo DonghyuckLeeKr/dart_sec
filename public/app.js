@@ -1,5 +1,6 @@
 const state = {
   labels: {},
+  sectors: [],
   analysisRows: [],
   analysisColumns: [],
   filingRows: [],
@@ -15,7 +16,8 @@ async function init() {
   bindEvents();
   const config = await apiGet("/api/config");
   state.labels = config.labels || {};
-  populateSectors(config.sectors || []);
+  state.sectors = config.sectors || [];
+  populateSectors(state.sectors);
   state.analysisColumns = config.metricColumns || [];
   state.filingColumns = config.filingColumns || [];
   renderTable($("analysisTable"), [], state.analysisColumns);
@@ -53,7 +55,7 @@ async function runAnalysis() {
     xbrlFallback: $("xbrlFallbackInput").checked,
     final: $("finalOnlyInput").checked,
     limit: Number($("limitInput").value || 0),
-    concurrency: 4
+    concurrency: 2
   };
   if (!payload.years.length || !payload.reports.length) {
     setStatus("사업연도와 보고서 종류를 확인하세요.", true);
@@ -63,20 +65,81 @@ async function runAnalysis() {
   setBusy(true);
   setStatus(`분석 중: ${payload.years.join(", ")} / ${payload.reports.length}개 보고서`);
   try {
-    const result = await apiPost("/api/analyze", payload);
-    state.analysisRows = result.rows || [];
-    state.analysisColumns = result.columns || state.analysisColumns;
+    const totalCompanies = selectedCompanyCount(payload.sector, payload.limit);
+    const batchSize = analysisBatchSize(payload);
+    const batches = [];
+    for (let offset = 0; offset < totalCompanies; offset += batchSize) {
+      batches.push({ offset, limit: Math.min(batchSize, totalCompanies - offset) });
+    }
+
+    const combined = {
+      rows: [],
+      warnings: [],
+      rawCount: 0,
+      columns: state.analysisColumns
+    };
+    for (let index = 0; index < batches.length; index += 1) {
+      const batch = batches[index];
+      setStatus(`분석 중: ${index + 1}/${batches.length} 묶음 (${batch.offset + 1}-${batch.offset + batch.limit}/${totalCompanies})`);
+      const result = await apiPost("/api/analyze", { ...payload, offset: batch.offset, limit: batch.limit });
+      combined.rows.push(...(result.rows || []));
+      combined.warnings.push(...(result.warnings || []));
+      combined.rawCount += result.rawCount || 0;
+      combined.columns = result.columns || combined.columns;
+    }
+
+    state.analysisRows = rerankRows(combined.rows);
+    state.analysisColumns = combined.columns || state.analysisColumns;
     renderTable($("analysisTable"), state.analysisRows, state.analysisColumns);
     switchView("analysis");
     const collected = state.analysisRows.filter((row) => row.collection_status === "수집 완료").length;
-    $("summaryLine").textContent = `수집 ${collected}/${state.analysisRows.length} | 원천 ${result.rawCount || 0}행`;
-    $("warningText").textContent = result.warnings?.length ? `경고 ${result.warnings.length}건` : "";
+    $("summaryLine").textContent = `수집 ${collected}/${state.analysisRows.length} | 원천 ${combined.rawCount || 0}행`;
+    $("warningText").textContent = combined.warnings.length ? `경고 ${combined.warnings.length}건` : "";
     setStatus("분석 완료");
   } catch (error) {
     setStatus(error.message, true);
   } finally {
     setBusy(false);
   }
+}
+
+function selectedCompanyCount(sectorName, limit) {
+  const sector = state.sectors.find((item) => item.name === sectorName);
+  const sectorCount = sector?.companyCount || 0;
+  const requested = Number(limit || 0);
+  return requested > 0 ? Math.min(requested, sectorCount || requested) : sectorCount;
+}
+
+function analysisBatchSize(payload) {
+  const reportCount = Math.max(payload.reports.length, 1);
+  const yearCount = Math.max(payload.years.length, 1);
+  const tasksPerCompany = reportCount * yearCount;
+  return Math.max(1, Math.floor(12 / tasksPerCompany));
+}
+
+function rerankRows(rows) {
+  const groups = new Map();
+  for (const row of rows) {
+    row.rank_operating_income = "";
+    if (row.collection_status !== "수집 완료" || row.operating_income === null || row.operating_income === undefined || row.operating_income === "") {
+      continue;
+    }
+    const key = `${row.bsns_year}|${row.reprt_code || row.report_key}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  }
+  for (const group of groups.values()) {
+    group
+      .sort((a, b) => Number(b.operating_income ?? -1e30) - Number(a.operating_income ?? -1e30))
+      .forEach((row, index) => {
+        row.rank_operating_income = index + 1;
+      });
+  }
+  return rows.sort((a, b) => {
+    const left = `${a.bsns_year || ""}|${a.reprt_code || a.report_key || ""}|${String(a.rank_operating_income || 9999).padStart(4, "0")}|${a.corp_name || ""}`;
+    const right = `${b.bsns_year || ""}|${b.reprt_code || b.report_key || ""}|${String(b.rank_operating_income || 9999).padStart(4, "0")}|${b.corp_name || ""}`;
+    return left.localeCompare(right);
+  });
 }
 
 async function listFilings() {
