@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DART Sector Analyzer</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <h1>DART Sector Analyzer</h1>
+          <p id="summaryLine">증권사 정기보고서 재무실적</p>
+        </div>
+        <div class="top-actions">
+          <button id="downloadCsvButton" type="button" disabled>CSV</button>
+        </div>
+      </header>
+
+      <section class="control-surface" aria-label="조회 조건">
+        <label>
+          <span>섹터</span>
+          <select id="sectorSelect"></select>
+        </label>
+        <label>
+          <span>사업연도</span>
+          <input id="yearsInput" value="2026" />
+        </label>
+        <label>
+          <span>재무제표</span>
+          <select id="fsDivSelect">
+            <option value="CFS">CFS</option>
+            <option value="OFS">OFS</option>
+          </select>
+        </label>
+        <label>
+          <span>처리 회사 수</span>
+          <input id="limitInput" type="number" min="0" step="1" placeholder="전체" />
+        </label>
+        <label>
+          <span>최근 일수</span>
+          <input id="daysInput" type="number" min="1" max="3650" value="30" />
+        </label>
+        <label class="api-key-field">
+          <span>API Key</span>
+          <input id="apiKeyInput" type="password" autocomplete="off" />
+        </label>
+      </section>
+
+      <section class="option-row" aria-label="보고서 및 옵션">
+        <label><input type="checkbox" name="report" value="q1" checked /> 1분기</label>
+        <label><input type="checkbox" name="report" value="half" /> 반기</label>
+        <label><input type="checkbox" name="report" value="q3" /> 3분기</label>
+        <label><input type="checkbox" name="report" value="annual" /> 사업</label>
+        <label><input id="fallbackOfsInput" type="checkbox" checked /> 연결 없으면 별도</label>
+        <label><input id="xbrlFallbackInput" type="checkbox" checked /> XBRL 보완</label>
+        <label><input id="finalOnlyInput" type="checkbox" checked /> 최종보고서</label>
+        <button id="analyzeButton" type="button">분석 실행</button>
+        <button id="filingsButton" type="button">공시 조회</button>
+      </section>
+
+      <section class="status-line" aria-live="polite">
+        <span id="statusText">대기 중</span>
+        <span id="warningText"></span>
+      </section>
+
+      <section class="table-zone">
+        <div class="table-tabs" role="tablist">
+          <button class="tab is-active" type="button" data-view="analysis">재무 분석</button>
+          <button class="tab" type="button" data-view="filings">공시 조회</button>
+        </div>
+        <div id="analysisView" class="table-view is-active">
+          <table id="analysisTable"></table>
+        </div>
+        <div id="filingsView" class="table-view">
+          <table id="filingsTable"></table>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

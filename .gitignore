@@ -1,0 +1,12 @@
+.dev.vars
+.env
+.wrangler/
+node_modules/
+npm-debug.log*
+wrangler-*.log
+node-dev*.log
+out/
+data/cache/
+.playwright-mcp/
+__pycache__/
+*.pyc

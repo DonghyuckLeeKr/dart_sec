@@ -1,0 +1,4 @@
+DART_API_KEY=발급받은_40자리_키
+OPEN_DART_BASE=https://opendart.fss.or.kr/api
+# OpenDART HTTPS 연결 오류가 날 때만 HTTP로 한 번 재시도합니다.
+ALLOW_OPEN_DART_HTTP_FALLBACK=true
