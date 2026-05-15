@@ -74,7 +74,7 @@ npm run deploy
 
 Cloudflare 대시보드에서는 Pages 프로젝트의 환경변수/Secret에 `DART_API_KEY`를 등록하세요. GitHub 연동 배포를 쓸 때는 빌드 명령을 `npm run check`로 두고, 빌드 출력 디렉터리는 `public`을 사용하면 됩니다. Deploy command에는 `npx wrangler deploy`를 넣지 마세요. GitHub 연동 Pages는 빌드 출력 디렉터리를 기준으로 Pages 배포를 자동 처리하고, 수동 Wrangler 배포가 필요할 때만 `npm run deploy` 또는 `npx wrangler pages deploy public`을 사용합니다.
 
-Cloudflare가 루트의 `pyproject.toml`을 보고 `pip install .`을 실행할 수 있습니다. 이 설치는 데스크톱 GUI 의존성 없이 가볍게 지나가도록 설정되어 있고, Qt GUI가 필요할 때만 로컬에서 `requirements-desktop.txt`를 설치하면 됩니다.
+Cloudflare Pages 빌드는 Python 설치가 필요 없습니다. Qt GUI가 필요할 때만 로컬에서 `requirements-desktop.txt`를 설치하면 됩니다.
 
 웹앱은 로컬 `out/` 폴더를 만들지 않습니다. 분석 결과와 공시 목록은 화면에서 `CSV`로 내려받고, PDF는 행별 `PDF` 버튼으로 DART 원문을 다운로드합니다. 서버리스 요청 안에서 처리하므로 한 번에 너무 많은 회사와 여러 보고서를 동시에 조회하면 Cloudflare 실행 시간 제한에 걸릴 수 있습니다. 그럴 때는 `처리 회사 수`를 나눠서 돌리면 됩니다.
 
