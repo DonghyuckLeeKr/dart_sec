@@ -114,7 +114,7 @@ function analysisBatchSize(payload) {
   const reportCount = Math.max(payload.reports.length, 1);
   const yearCount = Math.max(payload.years.length, 1);
   const tasksPerCompany = reportCount * yearCount;
-  return Math.max(1, Math.floor(12 / tasksPerCompany));
+  return Math.max(1, Math.floor(6 / tasksPerCompany));
 }
 
 function rerankRows(rows) {
