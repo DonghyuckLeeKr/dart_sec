@@ -73,9 +73,9 @@ Cloudflare 배포:
 npm run deploy
 ```
 
-Cloudflare 대시보드에서는 Worker의 변수 및 암호에 `DART_API_KEY`를 등록하세요. GitHub 연동 배포를 쓸 때는 빌드 명령을 `npm run check`, 배포 명령을 `npm run deploy`, 루트 디렉터리를 `/`로 두면 됩니다. 정적 파일 디렉터리는 `wrangler.toml`의 `[assets] directory = "./public"` 설정으로 배포됩니다.
+Cloudflare 대시보드에서는 Worker의 변수 및 암호에 `DART_API_KEY`를 등록하세요. GitHub 연동 배포를 쓸 때는 빌드 명령을 `npm run check`, 배포 명령을 `npm run deploy`, 루트 디렉터리를 `/`로 두면 됩니다. 정적 파일 디렉터리는 `wrangler.toml`의 `[assets] directory = "./public"` 설정으로 배포됩니다. 배포 스크립트는 대시보드에 등록한 `DART_API_KEY` 변수를 지우지 않도록 `wrangler deploy --keep-vars`를 사용합니다.
 
-`wrangler.toml`에는 Worker 한 번 실행당 OpenDART 호출 한도를 넉넉히 잡기 위해 `[limits] subrequests = 1000`을 설정했습니다. Cloudflare 무료 플랜은 subrequest 최대값이 50이므로, 배포에서 이 설정이 거부되면 Workers Paid 플랜이 필요하거나 웹앱의 자동 배치 크기를 더 낮춰야 합니다.
+Cloudflare 무료 플랜은 Worker 1회 실행당 subrequest 최대값이 50이라 `wrangler.toml`에서 한도를 올릴 수 없습니다. 대신 웹앱은 분석을 회사 1개 단위의 작은 `/api/analyze` 요청으로 쪼개 무료 플랜에서도 OpenDART 호출 한도에 걸리지 않도록 합니다.
 
 Cloudflare Pages 빌드는 Python 설치가 필요 없습니다. Qt GUI가 필요할 때만 로컬에서 `requirements-desktop.txt`를 설치하면 됩니다.
 

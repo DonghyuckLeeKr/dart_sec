@@ -2,9 +2,6 @@ name = "dart-sec-analyze"
 main = "src/index.js"
 compatibility_date = "2025-12-01"
 
-[limits]
-subrequests = 1000
-
 [assets]
 directory = "./public"
 binding = "ASSETS"
