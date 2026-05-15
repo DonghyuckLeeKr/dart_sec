@@ -72,7 +72,7 @@ Cloudflare Pages 배포:
 npm run deploy
 ```
 
-Cloudflare 대시보드에서는 Pages 프로젝트의 환경변수/Secret에 `DART_API_KEY`를 등록하세요. GitHub 연동 배포를 쓸 때는 빌드 명령을 `npm run check`로 두고, 빌드 출력 디렉터리는 `public`을 사용하면 됩니다. Deploy command에는 `npx wrangler deploy`를 넣지 마세요. GitHub 연동 Pages는 빌드 출력 디렉터리를 기준으로 Pages 배포를 자동 처리하고, 수동 Wrangler 배포가 필요할 때만 `npm run deploy` 또는 `npx wrangler pages deploy public`을 사용합니다.
+Cloudflare 대시보드에서는 Pages 프로젝트의 환경변수/Secret에 `DART_API_KEY`를 등록하세요. GitHub 연동 배포를 쓸 때는 빌드 명령을 `npm run check`로 두고, 빌드 출력 디렉터리는 `public`을 사용하면 됩니다. Deploy command에는 `npx wrangler deploy`를 넣지 마세요. GitHub 연동 Pages는 빌드 출력 디렉터리를 기준으로 Pages 배포를 자동 처리하고, 수동 Wrangler 배포가 필요할 때만 `npm run deploy` 또는 `npx wrangler pages deploy public --project-name dart-sec-analyze`를 사용합니다.
 
 Cloudflare Pages 빌드는 Python 설치가 필요 없습니다. Qt GUI가 필요할 때만 로컬에서 `requirements-desktop.txt`를 설치하면 됩니다.
 

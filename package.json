@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "wrangler pages dev public --compatibility-date=2025-12-01",
     "dev:node": "node scripts/dev-node-server.mjs",
-    "deploy": "wrangler pages deploy public",
+    "deploy": "wrangler pages deploy public --project-name dart-sec-analyze",
     "check": "node scripts/check-pages-modules.mjs"
   },
   "dependencies": {
