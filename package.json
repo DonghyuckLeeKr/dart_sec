@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler pages dev public --compatibility-date=2025-12-01",
+    "dev": "wrangler dev",
     "dev:node": "node scripts/dev-node-server.mjs",
-    "deploy": "wrangler pages deploy public --project-name dart-sec-analyze",
+    "deploy": "wrangler deploy",
     "check": "node scripts/check-pages-modules.mjs"
   },
   "dependencies": {

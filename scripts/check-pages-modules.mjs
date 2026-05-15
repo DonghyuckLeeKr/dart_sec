@@ -1,4 +1,5 @@
 import "../functions/api/[[path]].js";
+import "../src/index.js";
 import { analyzeSector, configPayload, listSectorFilings } from "../functions/lib/analysis.js";
 import { pdfDcmCandidates } from "../functions/lib/dart.js";
 
@@ -16,4 +17,4 @@ if (typeof analyzeSector !== "function" || typeof listSectorFilings !== "functio
   throw new Error("API modules did not load");
 }
 
-console.log("Cloudflare Pages modules OK");
+console.log("Cloudflare modules OK");
