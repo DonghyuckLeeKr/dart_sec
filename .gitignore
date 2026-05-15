@@ -10,3 +10,4 @@ data/cache/
 .playwright-mcp/
 __pycache__/
 *.pyc
+*.egg-info/
