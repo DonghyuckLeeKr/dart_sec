@@ -22,4 +22,17 @@ if (redacted.includes("1234567890123456789012345678901234567890")) {
   throw new Error("OpenDART key redaction failed");
 }
 
+globalThis.fetch = async () => new Response("", {
+  status: 302,
+  headers: { location: "https://opendart.fss.or.kr/error1.html" }
+});
+try {
+  await (await import("../functions/lib/dart.js")).dartJson("1234567890123456789012345678901234567890", "list.json", {});
+  throw new Error("Expected OpenDART redirect error");
+} catch (error) {
+  if (!String(error.message).includes("OpenDART 오류 페이지")) {
+    throw error;
+  }
+}
+
 console.log("Cloudflare modules OK");

@@ -1,5 +1,12 @@
 const DEFAULT_OPEN_DART_BASE = "https://opendart.fss.or.kr/api";
 const DART_WEB_BASE = "https://dart.fss.or.kr";
+const OPEN_DART_BROWSER_HEADERS = {
+  "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36",
+  "accept-language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+  "cache-control": "no-cache",
+  "pragma": "no-cache",
+  "referer": "https://opendart.fss.or.kr/"
+};
 
 let openDartBase = DEFAULT_OPEN_DART_BASE;
 let allowHttpFallback = false;
@@ -29,7 +36,7 @@ export async function dartJson(apiKey, endpoint, params = {}) {
   }
 
   const response = await fetchOpenDart(url, {
-    headers: { accept: "application/json,*/*" }
+    headers: openDartHeaders({ accept: "application/json,*/*" })
   }, "OpenDART");
   const text = await response.text();
   if (!response.ok) {
@@ -99,7 +106,7 @@ export async function xbrlDocument(apiKey, { rceptNo, reprtCode }) {
   url.searchParams.set("rcept_no", rceptNo);
   url.searchParams.set("reprt_code", reprtCode);
   const response = await fetchOpenDart(url, {
-    headers: { accept: "application/zip,*/*" }
+    headers: openDartHeaders({ accept: "application/zip,*/*" })
   }, "XBRL 다운로드");
   const bytes = new Uint8Array(await response.arrayBuffer());
   if (bytes[0] === 0x50 && bytes[1] === 0x4b) {
@@ -186,9 +193,16 @@ async function fetchOpenDart(url, options, label) {
   }
   if (response.status >= 300 && response.status < 400) {
     const location = response.headers.get("location");
+    if (location && /\/error1\.html?$/i.test(new URL(location, url).pathname)) {
+      throw new Error(`${label}가 OpenDART 오류 페이지로 리다이렉트되었습니다. Cloudflare Worker 출구 IP가 차단되었거나 DART_API_KEY의 허용 IP 설정이 맞지 않을 수 있습니다.`);
+    }
     throw new Error(`${label} 리다이렉트 응답 ${response.status}${location ? `: ${redactSensitiveText(location)}` : ""}`);
   }
   return response;
+}
+
+function openDartHeaders(headers) {
+  return { ...OPEN_DART_BROWSER_HEADERS, ...headers };
 }
 
 export function redactSensitiveText(value) {
