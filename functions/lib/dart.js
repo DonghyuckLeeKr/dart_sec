@@ -2,11 +2,11 @@ const DEFAULT_OPEN_DART_BASE = "https://opendart.fss.or.kr/api";
 const DART_WEB_BASE = "https://dart.fss.or.kr";
 
 let openDartBase = DEFAULT_OPEN_DART_BASE;
-let allowHttpFallback = true;
+let allowHttpFallback = false;
 
 export function configureDart(env) {
   openDartBase = env?.OPEN_DART_BASE || DEFAULT_OPEN_DART_BASE;
-  allowHttpFallback = String(env?.ALLOW_OPEN_DART_HTTP_FALLBACK || "true").toLowerCase() !== "false";
+  allowHttpFallback = String(env?.ALLOW_OPEN_DART_HTTP_FALLBACK || "false").toLowerCase() === "true";
 }
 
 export function resolveApiKey(env, request) {
@@ -28,34 +28,23 @@ export async function dartJson(apiKey, endpoint, params = {}) {
     }
   }
 
-  let response;
-  try {
-    response = await fetch(url, {
-      headers: { accept: "application/json,*/*" }
-    });
-  } catch (error) {
-    if (!allowHttpFallback || !url.protocol.startsWith("https")) {
-      throw new Error(`OpenDART 연결 실패: ${error.message}`);
-    }
-    url.protocol = "http:";
-    response = await fetch(url, {
-      headers: { accept: "application/json,*/*" }
-    });
-  }
+  const response = await fetchOpenDart(url, {
+    headers: { accept: "application/json,*/*" }
+  }, "OpenDART");
   const text = await response.text();
   if (!response.ok) {
-    throw new Error(`OpenDART HTTP ${response.status}: ${text.slice(0, 200)}`);
+    throw new Error(`OpenDART HTTP ${response.status}: ${redactSensitiveText(text.slice(0, 200))}`);
   }
 
   let data;
   try {
     data = JSON.parse(text);
   } catch (error) {
-    throw new Error(`OpenDART JSON 파싱 실패: ${text.slice(0, 200)}`);
+    throw new Error(`OpenDART JSON 파싱 실패: ${redactSensitiveText(text.slice(0, 200))}`);
   }
   const status = String(data.status || "000");
   if (!["000", "013"].includes(status)) {
-    throw new Error(`OpenDART status=${status}: ${data.message || "알 수 없는 오류"}`);
+    throw new Error(`OpenDART status=${status}: ${redactSensitiveText(data.message || "알 수 없는 오류")}`);
   }
   return data;
 }
@@ -109,26 +98,15 @@ export async function xbrlDocument(apiKey, { rceptNo, reprtCode }) {
   url.searchParams.set("crtfc_key", apiKey);
   url.searchParams.set("rcept_no", rceptNo);
   url.searchParams.set("reprt_code", reprtCode);
-  let response;
-  try {
-    response = await fetch(url, {
-      headers: { accept: "application/zip,*/*" }
-    });
-  } catch (error) {
-    if (!allowHttpFallback || !url.protocol.startsWith("https")) {
-      throw new Error(`XBRL 다운로드 실패: ${error.message}`);
-    }
-    url.protocol = "http:";
-    response = await fetch(url, {
-      headers: { accept: "application/zip,*/*" }
-    });
-  }
+  const response = await fetchOpenDart(url, {
+    headers: { accept: "application/zip,*/*" }
+  }, "XBRL 다운로드");
   const bytes = new Uint8Array(await response.arrayBuffer());
   if (bytes[0] === 0x50 && bytes[1] === 0x4b) {
     return bytes;
   }
   const text = new TextDecoder().decode(bytes.slice(0, 500));
-  throw new Error(`XBRL ZIP 응답이 아닙니다: ${text}`);
+  throw new Error(`XBRL ZIP 응답이 아닙니다: ${redactSensitiveText(text)}`);
 }
 
 export async function dartViewerHtml(rceptNo) {
@@ -189,4 +167,33 @@ export async function fetchPdf(rceptNo) {
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function fetchOpenDart(url, options, label) {
+  let response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      redirect: "manual"
+    });
+  } catch (error) {
+    if (!allowHttpFallback || !url.protocol.startsWith("https")) {
+      throw new Error(`${label} 연결 실패: ${redactSensitiveText(error.message)}`);
+    }
+    const fallbackUrl = new URL(url);
+    fallbackUrl.protocol = "http:";
+    return fetchOpenDart(fallbackUrl, options, `${label} HTTP fallback`);
+  }
+  if (response.status >= 300 && response.status < 400) {
+    const location = response.headers.get("location");
+    throw new Error(`${label} 리다이렉트 응답 ${response.status}${location ? `: ${redactSensitiveText(location)}` : ""}`);
+  }
+  return response;
+}
+
+export function redactSensitiveText(value) {
+  return String(value || "")
+    .replace(/(crtfc_key=)[^&\s,]+/gi, "$1[redacted]")
+    .replace(/([?&]crtfc_key=)[^&\s,]+/gi, "$1[redacted]")
+    .replace(/[A-Za-z0-9]{40}/g, "[redacted]");
 }

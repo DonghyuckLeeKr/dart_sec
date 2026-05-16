@@ -1,6 +1,6 @@
 import { COLUMN_LABELS } from "../lib/constants.js";
 import { analyzeSector, configPayload, listSectorFilings } from "../lib/analysis.js";
-import { configureDart, fetchPdf, resolveApiKey } from "../lib/dart.js";
+import { configureDart, fetchPdf, redactSensitiveText, resolveApiKey } from "../lib/dart.js";
 
 const JSON_HEADERS = {
   "content-type": "application/json; charset=utf-8",
@@ -57,7 +57,7 @@ export async function onRequest(context) {
 
     return json({ ok: false, error: "없는 API 경로입니다." }, 404);
   } catch (error) {
-    return json({ ok: false, error: error.message || String(error) }, 500);
+    return json({ ok: false, error: redactSensitiveText(error.message || String(error)) }, 500);
   }
 }
 

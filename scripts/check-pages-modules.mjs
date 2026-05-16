@@ -1,7 +1,7 @@
 import "../functions/api/[[path]].js";
 import "../src/index.js";
 import { analyzeSector, configPayload, listSectorFilings } from "../functions/lib/analysis.js";
-import { pdfDcmCandidates } from "../functions/lib/dart.js";
+import { pdfDcmCandidates, redactSensitiveText } from "../functions/lib/dart.js";
 
 const config = configPayload();
 if (!config.sectors.find((sector) => sector.name === "securities")) {
@@ -15,6 +15,11 @@ if (candidates[0] !== "11379017") {
 
 if (typeof analyzeSector !== "function" || typeof listSectorFilings !== "function") {
   throw new Error("API modules did not load");
+}
+
+const redacted = redactSensitiveText("https://opendart.fss.or.kr/api/list.json?crtfc_key=1234567890123456789012345678901234567890&corp_code=00111722");
+if (redacted.includes("1234567890123456789012345678901234567890")) {
+  throw new Error("OpenDART key redaction failed");
 }
 
 console.log("Cloudflare modules OK");
