@@ -1,4 +1,5 @@
 import "../functions/api/[[path]].js";
+import "../api/[...path].js";
 import "../src/index.js";
 import { analyzeSector, configPayload, listSectorFilings } from "../functions/lib/analysis.js";
 import { pdfDcmCandidates, redactSensitiveText } from "../functions/lib/dart.js";
@@ -35,4 +36,4 @@ try {
   }
 }
 
-console.log("Cloudflare modules OK");
+console.log("Web modules OK");
