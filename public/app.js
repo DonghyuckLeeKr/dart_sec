@@ -466,6 +466,9 @@ function renderChart() {
     .filter((item) => Number.isFinite(item.value));
   const chartBody = $("chartBody");
   chartBody.innerHTML = "";
+  const isEmpty = !rows.length;
+  $("chartPanel").classList.toggle("is-empty", isEmpty);
+  chartBody.classList.toggle("is-empty", isEmpty);
   if (!rows.length) {
     chartBody.innerHTML = `<div class="empty-chart">데이터 없음</div>`;
     $("chartSubtitle").textContent = "분석 결과가 나오면 회사별 지표를 비교합니다.";
@@ -605,7 +608,12 @@ function renderTrend() {
   const trendBody = $("trendBody");
   trendBody.innerHTML = "";
   const periods = sortedPeriods(state.analysisRows);
+  const setTrendEmpty = (empty) => {
+    $("trendPanel").classList.toggle("is-empty", empty);
+    trendBody.classList.toggle("is-empty", empty);
+  };
   if (periods.length < 2) {
+    setTrendEmpty(true);
     trendBody.innerHTML = `<div class="empty-chart">여러 연도나 보고서를 선택하면 추이가 표시됩니다.</div>`;
     $("trendSubtitle").textContent = "여러 연도나 보고서를 선택하면 주요 회사의 흐름을 보여줍니다.";
     return;
@@ -630,11 +638,13 @@ function renderTrend() {
     .slice(0, 5);
 
   if (!series.length) {
+    setTrendEmpty(true);
     trendBody.innerHTML = `<div class="empty-chart">추이 계산 가능한 회사가 없습니다.</div>`;
     $("trendSubtitle").textContent = "동일 회사가 둘 이상의 기간에 수집되어야 합니다.";
     return;
   }
 
+  setTrendEmpty(false);
   $("trendSubtitle").textContent = `${displayLabel(metric)} 기준 주요 ${series.length}개 회사`;
   trendBody.appendChild(trendSvg(series, periods, metric));
 }
