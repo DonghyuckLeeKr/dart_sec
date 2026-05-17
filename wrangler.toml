@@ -7,3 +7,13 @@ directory = "./public"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
 run_worker_first = ["/api/*"]
+
+# Optional storage bindings. Create the resources first, then uncomment and fill IDs.
+# [[d1_databases]]
+# binding = "DART_DB"
+# database_name = "dart-sec-analyze"
+# database_id = "replace-with-d1-database-id"
+
+# [[r2_buckets]]
+# binding = "DART_BUCKET"
+# bucket_name = "dart-sec-analyze-pdfs"

@@ -5,6 +5,8 @@ const state = {
   analysisColumns: [],
   filingRows: [],
   filingColumns: [],
+  historyRows: [],
+  storage: { d1: false, r2: false },
   activeWorkspace: "analysis",
   activeView: "analysis",
   pdfDownloadUrl: "",
@@ -67,9 +69,11 @@ async function init() {
   const config = await apiGet("/api/config");
   state.labels = { ...DEFAULT_LABELS, ...(config.labels || {}) };
   state.sectors = config.sectors || [];
+  state.storage = config.storage || state.storage;
   populateSectors(state.sectors);
   state.analysisColumns = config.metricColumns || [];
   state.filingColumns = config.filingColumns || [];
+  if (state.storage.d1) await refreshHistory({ silent: true });
   renderTable($("analysisTable"), [], state.analysisColumns);
   renderTable($("filingsTable"), [], state.filingColumns);
   renderStrategyDashboard();
@@ -164,6 +168,7 @@ async function runAnalysis() {
     state.analysisWarnings = combined.warnings;
     state.analysisRawCount = combined.rawCount || 0;
     state.lastAnalysisPayload = payload;
+    await refreshHistory({ silent: true });
     renderTable($("analysisTable"), state.analysisRows, state.analysisColumns);
     renderStrategyDashboard();
     renderChart();
@@ -172,7 +177,7 @@ async function runAnalysis() {
     switchWorkspace("analysis");
     switchView("analysis");
     const collected = state.analysisRows.filter((row) => row.collection_status === "수집 완료").length;
-    $("summaryLine").textContent = `수집 ${collected}/${state.analysisRows.length} | 원천 ${combined.rawCount || 0}행`;
+    $("summaryLine").textContent = `수집 ${collected}/${state.analysisRows.length} | 원천 ${combined.rawCount || 0}행${state.storage.d1 ? " | DB 저장" : ""}`;
     $("warningText").textContent = combined.warnings.length ? `경고 ${combined.warnings.length}건` : "";
     setStatus("분석 완료");
   } catch (error) {
@@ -241,6 +246,29 @@ async function listFilings() {
     setStatus(error.message, true);
   } finally {
     setBusy(false);
+  }
+}
+
+async function refreshHistory({ silent = false } = {}) {
+  if (!state.storage.d1) {
+    state.historyRows = [];
+    return false;
+  }
+  const params = new URLSearchParams({
+    sector: $("sectorSelect").value,
+    reports: selectedReports().join(","),
+    fsDiv: $("fsDivSelect").value,
+    limit: "5000"
+  });
+  try {
+    const result = await apiGet(`/api/history?${params}`);
+    state.storage = { ...state.storage, ...(result.storage || {}) };
+    state.historyRows = result.enabled ? result.rows || [] : [];
+    return state.historyRows.length > 0;
+  } catch (error) {
+    state.historyRows = [];
+    if (!silent) setStatus(error.message, true);
+    return false;
   }
 }
 
@@ -621,20 +649,21 @@ function renderTrend() {
   const metric = $("trendMetricSelect").value;
   const trendBody = $("trendBody");
   trendBody.innerHTML = "";
-  const periods = sortedPeriods(state.analysisRows);
+  const sourceRows = trendSourceRows();
+  const periods = sortedPeriods(sourceRows);
   const setTrendEmpty = (empty) => {
     $("trendPanel").classList.toggle("is-empty", empty);
     trendBody.classList.toggle("is-empty", empty);
   };
   if (periods.length < 2) {
     setTrendEmpty(true);
-    trendBody.innerHTML = `<div class="empty-chart">여러 연도나 보고서를 선택하면 추이가 표시됩니다.</div>`;
-    $("trendSubtitle").textContent = "여러 연도나 보고서를 선택하면 주요 회사의 흐름을 보여줍니다.";
+    trendBody.innerHTML = `<div class="empty-chart">${state.storage.d1 ? "DB에 둘 이상의 기간이 저장되면 추이가 표시됩니다." : "여러 연도나 보고서를 선택하면 추이가 표시됩니다."}</div>`;
+    $("trendSubtitle").textContent = state.storage.d1 ? "분석을 실행하면 결과가 D1에 누적되고 시계열에 재사용됩니다." : "여러 연도나 보고서를 선택하면 주요 회사의 흐름을 보여줍니다.";
     return;
   }
 
   const rowsByCompany = new Map();
-  for (const row of state.analysisRows.filter((item) => item.collection_status === "수집 완료")) {
+  for (const row of sourceRows.filter((item) => item.collection_status === "수집 완료")) {
     const value = chartValue(row, metric);
     if (!Number.isFinite(value)) continue;
     if (!rowsByCompany.has(row.corp_name)) rowsByCompany.set(row.corp_name, new Map());
@@ -659,8 +688,12 @@ function renderTrend() {
   }
 
   setTrendEmpty(false);
-  $("trendSubtitle").textContent = `${displayLabel(metric)} 기준 주요 ${series.length}개 회사`;
+  $("trendSubtitle").textContent = `${displayLabel(metric)} 기준 주요 ${series.length}개 회사 · ${state.historyRows.length ? "저장 데이터" : "현재 조회"}`;
   trendBody.appendChild(trendSvg(series, periods, metric));
+}
+
+function trendSourceRows() {
+  return state.historyRows.length ? state.historyRows : state.analysisRows;
 }
 
 function trendSvg(series, periods, metric) {
