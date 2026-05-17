@@ -1,18 +1,19 @@
 {
-  "name": "dart-sector-analyzer-vercel",
+  "name": "dart-sector-analyzer-cloudflare",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node scripts/dev-node-server.mjs",
+    "dev": "wrangler dev",
     "dev:node": "node scripts/dev-node-server.mjs",
     "build": "npm run check",
-    "deploy": "npx vercel deploy",
-    "deploy:prod": "npx vercel deploy --prod",
-    "deploy:cloudflare": "npx wrangler deploy --keep-vars",
+    "deploy": "wrangler deploy --keep-vars",
     "check": "node scripts/check-pages-modules.mjs"
   },
   "dependencies": {
     "fflate": "^0.8.2"
+  },
+  "devDependencies": {
+    "wrangler": "^4.50.0"
   }
 }

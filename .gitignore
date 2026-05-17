@@ -1,7 +1,6 @@
 .dev.vars
 .env
 .wrangler/
-.vercel/
 node_modules/
 npm-debug.log*
 wrangler-*.log
