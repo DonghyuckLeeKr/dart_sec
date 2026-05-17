@@ -23,6 +23,7 @@
             <option value="html">HTML</option>
           </select>
           <button id="exportButton" type="button" disabled>내보내기</button>
+          <button id="reportButton" type="button" disabled>전략 리포트</button>
         </div>
       </header>
 
@@ -69,6 +70,28 @@
         <span id="warningText"></span>
       </section>
 
+      <section id="strategyPanel" class="strategy-panel" aria-label="전략 요약">
+        <div class="strategy-header">
+          <div>
+            <h2>전략 요약</h2>
+            <p id="strategySubtitle">분석 결과가 나오면 핵심 판단 지표를 요약합니다.</p>
+          </div>
+        </div>
+        <div id="kpiGrid" class="kpi-grid">
+          <div class="empty-chart">데이터 없음</div>
+        </div>
+        <div class="strategy-split">
+          <section class="insight-box" aria-label="핵심 인사이트">
+            <h3>핵심 인사이트</h3>
+            <ul id="insightList"></ul>
+          </section>
+          <section class="group-box" aria-label="비교군 요약">
+            <h3>비교군 요약</h3>
+            <div id="groupSummary"></div>
+          </section>
+        </div>
+      </section>
+
       <section id="chartPanel" class="chart-panel" aria-label="비교 그래프">
         <div class="chart-toolbar">
           <div>
@@ -90,6 +113,30 @@
           </label>
         </div>
         <div id="chartBody" class="chart-body">
+          <div class="empty-chart">데이터 없음</div>
+        </div>
+      </section>
+
+      <section id="trendPanel" class="trend-panel" aria-label="시계열 추이">
+        <div class="chart-toolbar">
+          <div>
+            <h2>시계열 추이</h2>
+            <p id="trendSubtitle">여러 연도나 보고서를 선택하면 주요 회사의 흐름을 보여줍니다.</p>
+          </div>
+          <label>
+            <span>추이 지표</span>
+            <select id="trendMetricSelect">
+              <option value="operating_income">영업이익</option>
+              <option value="pretax_income">세전이익</option>
+              <option value="net_income">당기순이익</option>
+              <option value="operating_revenue">영업수익</option>
+              <option value="equity">자본총계</option>
+              <option value="operating_margin">영업이익률</option>
+              <option value="roe">ROE</option>
+            </select>
+          </label>
+        </div>
+        <div id="trendBody" class="trend-body">
           <div class="empty-chart">데이터 없음</div>
         </div>
       </section>
@@ -125,6 +172,6 @@
       </section>
     </div>
 
-    <script type="module" src="/app.js?v=20260517-ui-tools"></script>
+    <script type="module" src="/app.js?v=20260517-strategy-board"></script>
   </body>
 </html>

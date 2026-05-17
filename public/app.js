@@ -7,7 +7,10 @@ const state = {
   filingColumns: [],
   activeView: "analysis",
   pdfDownloadUrl: "",
-  lastFocusedElement: null
+  lastFocusedElement: null,
+  analysisWarnings: [],
+  analysisRawCount: 0,
+  lastAnalysisPayload: null
 };
 
 const $ = (id) => document.getElementById(id);
@@ -24,7 +27,9 @@ async function init() {
   state.filingColumns = config.filingColumns || [];
   renderTable($("analysisTable"), [], state.analysisColumns);
   renderTable($("filingsTable"), [], state.filingColumns);
+  renderStrategyDashboard();
   renderChart();
+  renderTrend();
   setStatus("대기 중");
 }
 
@@ -32,7 +37,9 @@ function bindEvents() {
   $("analyzeButton").addEventListener("click", runAnalysis);
   $("filingsButton").addEventListener("click", listFilings);
   $("exportButton").addEventListener("click", downloadCurrentFile);
+  $("reportButton").addEventListener("click", downloadStrategyReport);
   $("chartMetricSelect").addEventListener("change", renderChart);
+  $("trendMetricSelect").addEventListener("change", renderTrend);
   $("pdfCloseButton").addEventListener("click", closePdfViewer);
   $("pdfDownloadButton").addEventListener("click", () => {
     if (state.pdfDownloadUrl) downloadUrl(state.pdfDownloadUrl);
@@ -104,8 +111,13 @@ async function runAnalysis() {
 
     state.analysisRows = rerankRows(combined.rows);
     state.analysisColumns = combined.columns || state.analysisColumns;
+    state.analysisWarnings = combined.warnings;
+    state.analysisRawCount = combined.rawCount || 0;
+    state.lastAnalysisPayload = payload;
     renderTable($("analysisTable"), state.analysisRows, state.analysisColumns);
+    renderStrategyDashboard();
     renderChart();
+    renderTrend();
     switchView("analysis");
     const collected = state.analysisRows.filter((row) => row.collection_status === "수집 완료").length;
     $("summaryLine").textContent = `수집 ${collected}/${state.analysisRows.length} | 원천 ${combined.rawCount || 0}행`;
@@ -328,6 +340,227 @@ function renderChart() {
   }
 }
 
+function renderStrategyDashboard() {
+  const rows = latestComparableRows();
+  const kpiGrid = $("kpiGrid");
+  const insightList = $("insightList");
+  const groupSummary = $("groupSummary");
+  kpiGrid.innerHTML = "";
+  insightList.innerHTML = "";
+  groupSummary.innerHTML = "";
+
+  if (!state.analysisRows.length) {
+    kpiGrid.innerHTML = `<div class="empty-chart">데이터 없음</div>`;
+    $("strategySubtitle").textContent = "분석 결과가 나오면 핵심 판단 지표를 요약합니다.";
+    insightList.appendChild(emptyListItem("분석 실행 후 자동으로 인사이트가 생성됩니다."));
+    groupSummary.innerHTML = `<div class="empty-mini">데이터 없음</div>`;
+    $("reportButton").disabled = true;
+    return;
+  }
+
+  const collected = state.analysisRows.filter((row) => row.collection_status === "수집 완료");
+  const missing = state.analysisRows.length - collected.length;
+  const periodLabel = rows[0] ? `${rows[0].bsns_year} ${rows[0].report_label || rows[0].report_key || ""}`.trim() : "최근 선택 기간";
+  const operatingIncomeValues = values(rows, "operating_income");
+  const marginValues = rows.map((row) => chartValue(row, "operating_margin")).filter(Number.isFinite);
+  const topIncome = topBy(rows, "operating_income");
+  const topRoe = topBy(rows, "roe");
+  const weakMargin = bottomBy(rows, "operating_margin");
+  const estimateRows = rows.filter((row) => isBlank(row.operating_revenue) && !isBlank(row.operating_revenue_estimate));
+
+  $("strategySubtitle").textContent = `${periodLabel} 기준 ${rows.length}개 회사 비교`;
+  kpiGrid.append(
+    kpiCard("수집률", percent(collected.length, state.analysisRows.length), `${collected.length}/${state.analysisRows.length}행 수집`),
+    kpiCard("합산 영업이익", formatMetric(sum(operatingIncomeValues), "operating_income"), `${rows.length}개사 기준`),
+    kpiCard("중앙 영업이익", formatMetric(median(operatingIncomeValues), "operating_income"), "극단값 노이즈 완화"),
+    kpiCard("평균 영업이익률", formatMetric(avg(marginValues), "operating_margin"), "공식 영업수익 기준"),
+    kpiCard("추정 영업수익", `${estimateRows.length}개`, "공식 영업수익 공백 보완"),
+    kpiCard("미확보/경고", `${missing}/${state.analysisWarnings.length}`, "행 미확보 / 경고 건수")
+  );
+
+  for (const insight of buildInsights(rows, { topIncome, topRoe, weakMargin, estimateRows, missing })) {
+    const li = document.createElement("li");
+    li.textContent = insight;
+    insightList.appendChild(li);
+  }
+  renderGroupSummary(rows, groupSummary);
+  $("reportButton").disabled = !rows.length;
+}
+
+function kpiCard(title, value, note) {
+  const card = document.createElement("div");
+  card.className = "kpi-card";
+  card.innerHTML = `<span>${htmlEscape(title)}</span><strong>${htmlEscape(value)}</strong><small>${htmlEscape(note)}</small>`;
+  return card;
+}
+
+function buildInsights(rows, context) {
+  const insights = [];
+  if (context.topIncome) {
+    insights.push(`영업이익 1위는 ${context.topIncome.corp_name}이며 ${formatMetric(context.topIncome.operating_income, "operating_income")}입니다.`);
+  }
+  if (context.topRoe) {
+    insights.push(`ROE 상위는 ${context.topRoe.corp_name} ${formatMetric(context.topRoe.roe, "roe")}로 자본 효율성이 돋보입니다.`);
+  }
+  if (context.weakMargin && Number(context.weakMargin.operating_margin) < 0.05) {
+    insights.push(`${context.weakMargin.corp_name}의 영업이익률은 ${formatMetric(context.weakMargin.operating_margin, "operating_margin")}로 수익성 점검 대상입니다.`);
+  }
+  if (context.estimateRows.length) {
+    insights.push(`영업수익 공식값이 비어 추정 합산을 쓴 회사가 ${context.estimateRows.length}개 있습니다. 원문 PDF 확인이 필요합니다.`);
+  }
+  if (context.missing > 0) {
+    insights.push(`미확보 행 ${context.missing}건은 공시 접수 여부와 XBRL 계정 추출 상태를 확인해야 합니다.`);
+  }
+  if (!insights.length) insights.push("수집 범위 내에서 큰 결측 없이 비교 가능한 상태입니다.");
+  return insights;
+}
+
+function renderGroupSummary(rows, container) {
+  const groups = new Map();
+  for (const row of rows) {
+    const group = companyGroup(row.corp_name);
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push(row);
+  }
+  if (!groups.size) {
+    container.innerHTML = `<div class="empty-mini">데이터 없음</div>`;
+    return;
+  }
+
+  const table = document.createElement("table");
+  table.className = "mini-table";
+  table.innerHTML = `<thead><tr><th>비교군</th><th>회사 수</th><th>영업이익 중앙값</th><th>평균 ROE</th></tr></thead>`;
+  const tbody = document.createElement("tbody");
+  for (const [group, groupRows] of [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${htmlEscape(group)}</td><td>${groupRows.length}</td><td>${htmlEscape(formatMetric(median(values(groupRows, "operating_income")), "operating_income"))}</td><td>${htmlEscape(formatMetric(avg(values(groupRows, "roe")), "roe"))}</td>`;
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  container.appendChild(table);
+}
+
+function renderTrend() {
+  const metric = $("trendMetricSelect").value;
+  const trendBody = $("trendBody");
+  trendBody.innerHTML = "";
+  const periods = sortedPeriods(state.analysisRows);
+  if (periods.length < 2) {
+    trendBody.innerHTML = `<div class="empty-chart">여러 연도나 보고서를 선택하면 추이가 표시됩니다.</div>`;
+    $("trendSubtitle").textContent = "여러 연도나 보고서를 선택하면 주요 회사의 흐름을 보여줍니다.";
+    return;
+  }
+
+  const rowsByCompany = new Map();
+  for (const row of state.analysisRows.filter((item) => item.collection_status === "수집 완료")) {
+    const value = chartValue(row, metric);
+    if (!Number.isFinite(value)) continue;
+    if (!rowsByCompany.has(row.corp_name)) rowsByCompany.set(row.corp_name, new Map());
+    rowsByCompany.get(row.corp_name).set(periodKey(row), { row, value });
+  }
+
+  const series = [...rowsByCompany.entries()]
+    .map(([name, periodMap]) => ({
+      name,
+      values: periods.map((period) => periodMap.get(period.key)?.value ?? null),
+      latest: periodMap.get(periods.at(-1).key)?.value ?? null
+    }))
+    .filter((item) => item.values.filter(Number.isFinite).length >= 2)
+    .sort((a, b) => Math.abs(b.latest ?? 0) - Math.abs(a.latest ?? 0))
+    .slice(0, 5);
+
+  if (!series.length) {
+    trendBody.innerHTML = `<div class="empty-chart">추이 계산 가능한 회사가 없습니다.</div>`;
+    $("trendSubtitle").textContent = "동일 회사가 둘 이상의 기간에 수집되어야 합니다.";
+    return;
+  }
+
+  $("trendSubtitle").textContent = `${state.labels[metric] || metric} 기준 주요 ${series.length}개 회사`;
+  trendBody.appendChild(trendSvg(series, periods, metric));
+}
+
+function trendSvg(series, periods, metric) {
+  const width = 820;
+  const height = 240;
+  const pad = { top: 22, right: 24, bottom: 46, left: 80 };
+  const valuesFlat = series.flatMap((item) => item.values).filter(Number.isFinite);
+  const minValue = Math.min(...valuesFlat, 0);
+  const maxValue = Math.max(...valuesFlat, 1);
+  const range = maxValue - minValue || 1;
+  const colors = ["#3fb7a4", "#d34bc6", "#e3bd58", "#7aa7ff", "#ff8f70"];
+  const xFor = (index) => pad.left + (index * (width - pad.left - pad.right)) / Math.max(periods.length - 1, 1);
+  const yFor = (value) => pad.top + ((maxValue - value) * (height - pad.top - pad.bottom)) / range;
+
+  const wrap = document.createElement("div");
+  wrap.className = "trend-wrap";
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", `${state.labels[metric] || metric} 추이`);
+
+  svg.appendChild(svgLine(pad.left, yFor(0), width - pad.right, yFor(0), "trend-axis"));
+  periods.forEach((period, index) => {
+    const x = xFor(index);
+    svg.appendChild(svgText(x, height - 16, period.label, "trend-label", "middle"));
+  });
+  svg.appendChild(svgText(8, yFor(maxValue), formatMetric(maxValue, metric), "trend-scale", "start"));
+  svg.appendChild(svgText(8, yFor(minValue), formatMetric(minValue, metric), "trend-scale", "start"));
+
+  series.forEach((item, seriesIndex) => {
+    const points = item.values
+      .map((value, index) => (Number.isFinite(value) ? `${xFor(index)},${yFor(value)}` : null))
+      .filter(Boolean)
+      .join(" ");
+    const polyline = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    polyline.setAttribute("points", points);
+    polyline.setAttribute("fill", "none");
+    polyline.setAttribute("stroke", colors[seriesIndex % colors.length]);
+    polyline.setAttribute("stroke-width", "3");
+    polyline.setAttribute("stroke-linecap", "round");
+    polyline.setAttribute("stroke-linejoin", "round");
+    svg.appendChild(polyline);
+    item.values.forEach((value, index) => {
+      if (!Number.isFinite(value)) return;
+      const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      circle.setAttribute("cx", xFor(index));
+      circle.setAttribute("cy", yFor(value));
+      circle.setAttribute("r", "4");
+      circle.setAttribute("fill", colors[seriesIndex % colors.length]);
+      svg.appendChild(circle);
+    });
+  });
+
+  const legend = document.createElement("div");
+  legend.className = "trend-legend";
+  series.forEach((item, index) => {
+    const chip = document.createElement("span");
+    chip.innerHTML = `<i style="background:${colors[index % colors.length]}"></i>${htmlEscape(item.name)}`;
+    legend.appendChild(chip);
+  });
+  wrap.append(svg, legend);
+  return wrap;
+}
+
+function svgLine(x1, y1, x2, y2, className) {
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("x1", x1);
+  line.setAttribute("y1", y1);
+  line.setAttribute("x2", x2);
+  line.setAttribute("y2", y2);
+  line.setAttribute("class", className);
+  return line;
+}
+
+function svgText(x, y, text, className, anchor) {
+  const node = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  node.setAttribute("x", x);
+  node.setAttribute("y", y);
+  node.setAttribute("class", className);
+  node.setAttribute("text-anchor", anchor);
+  node.textContent = text;
+  return node;
+}
+
 function chartValue(row, metric) {
   if (metric === "operating_revenue") {
     return numeric(row.operating_revenue ?? row.operating_revenue_estimate);
@@ -338,6 +571,117 @@ function chartValue(row, metric) {
 function numeric(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function latestComparableRows() {
+  const completed = state.analysisRows.filter((row) => row.collection_status === "수집 완료");
+  if (!completed.length) return [];
+  const periods = sortedPeriods(completed);
+  const latest = periods.at(-1)?.key;
+  return completed.filter((row) => periodKey(row) === latest);
+}
+
+function sortedPeriods(rows) {
+  const periods = new Map();
+  for (const row of rows) {
+    const key = periodKey(row);
+    if (!periods.has(key)) {
+      periods.set(key, {
+        key,
+        label: periodLabel(row),
+        sort: periodSortValue(row)
+      });
+    }
+  }
+  return [...periods.values()].sort((a, b) => a.sort - b.sort);
+}
+
+function periodKey(row) {
+  return `${row.bsns_year || ""}|${reportOrder(row.report_key || row.reprt_code || row.report_label)}`;
+}
+
+function periodSortValue(row) {
+  return Number(row.bsns_year || 0) * 10 + reportOrder(row.report_key || row.reprt_code || row.report_label);
+}
+
+function periodLabel(row) {
+  const year = row.bsns_year || "";
+  const order = reportOrder(row.report_key || row.reprt_code || row.report_label);
+  const suffix = { 1: "1Q", 2: "2Q", 3: "3Q", 4: "FY" }[order] || row.report_label || "";
+  return `${year} ${suffix}`.trim();
+}
+
+function reportOrder(value) {
+  const text = String(value || "");
+  if (text === "q1" || text === "11013" || text.includes("1분기")) return 1;
+  if (text === "half" || text === "11012" || text.includes("반기")) return 2;
+  if (text === "q3" || text === "11014" || text.includes("3분기")) return 3;
+  if (text === "annual" || text === "11011" || text.includes("사업")) return 4;
+  return 0;
+}
+
+function values(rows, metric) {
+  return rows.map((row) => chartValue(row, metric)).filter(Number.isFinite);
+}
+
+function sum(numbers) {
+  return numbers.reduce((total, value) => total + value, 0);
+}
+
+function avg(numbers) {
+  return numbers.length ? sum(numbers) / numbers.length : null;
+}
+
+function median(numbers) {
+  if (!numbers.length) return null;
+  const sorted = numbers.slice().sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function topBy(rows, metric) {
+  return rows
+    .filter((row) => Number.isFinite(chartValue(row, metric)))
+    .sort((a, b) => chartValue(b, metric) - chartValue(a, metric))[0] || null;
+}
+
+function bottomBy(rows, metric) {
+  return rows
+    .filter((row) => Number.isFinite(chartValue(row, metric)))
+    .sort((a, b) => chartValue(a, metric) - chartValue(b, metric))[0] || null;
+}
+
+function percent(numerator, denominator) {
+  if (!denominator) return "0.0%";
+  return `${((numerator / denominator) * 100).toFixed(1)}%`;
+}
+
+function formatMetric(value, metric) {
+  return Number.isFinite(value) ? formatCell(value, metric) : "-";
+}
+
+function isBlank(value) {
+  return value === null || value === undefined || value === "";
+}
+
+function emptyListItem(text) {
+  const li = document.createElement("li");
+  li.textContent = text;
+  return li;
+}
+
+function companyGroup(name) {
+  const company = String(name || "");
+  if (["미래에셋증권", "NH투자증권", "한국투자증권", "삼성증권", "KB증권", "신한투자증권", "하나증권", "메리츠증권"].includes(company)) {
+    return "대형 종합";
+  }
+  if (["키움증권", "토스증권", "카카오페이증권"].includes(company)) {
+    return "리테일/디지털";
+  }
+  if (["대신증권", "한화투자증권", "유안타증권", "DB금융투자", "유진투자증권", "교보증권", "신영증권", "현대차증권", "SK증권", "LS증권", "한양증권", "다올투자증권"].includes(company)) {
+    return "중형 종합";
+  }
+  return "기타/비상장";
 }
 
 function downloadCurrentFile() {
@@ -368,6 +712,73 @@ function downloadCurrentFile() {
   const extension = format === "tsv" ? "tsv" : "csv";
   const type = format === "tsv" ? "text/tab-separated-values;charset=utf-8" : "text/csv;charset=utf-8";
   downloadBlob(`${name}.${extension}`, delimitedTable(table, delimiter), type);
+}
+
+function downloadStrategyReport() {
+  const report = buildStrategyReport();
+  const name = `strategy_report_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "")}.md`;
+  downloadBlob(name, report, "text/markdown;charset=utf-8");
+}
+
+function buildStrategyReport() {
+  const rows = latestComparableRows();
+  const collected = state.analysisRows.filter((row) => row.collection_status === "수집 완료");
+  const period = rows[0] ? periodLabel(rows[0]) : "선택 기간";
+  const topIncome = topBy(rows, "operating_income");
+  const topRoe = topBy(rows, "roe");
+  const weakMargin = bottomBy(rows, "operating_margin");
+  const estimateRows = rows.filter((row) => isBlank(row.operating_revenue) && !isBlank(row.operating_revenue_estimate));
+  const lines = [
+    `# 증권사 섹터 전략 리포트`,
+    ``,
+    `- 생성시각: ${new Date().toLocaleString("ko-KR")}`,
+    `- 기준기간: ${period}`,
+    `- 수집률: ${percent(collected.length, state.analysisRows.length)} (${collected.length}/${state.analysisRows.length})`,
+    `- 원천 행 수: ${new Intl.NumberFormat("ko-KR").format(state.analysisRawCount || 0)}`,
+    `- 경고 건수: ${state.analysisWarnings.length}`,
+    ``,
+    `## 핵심 판단`,
+    ``
+  ];
+  for (const insight of buildInsights(rows, { topIncome, topRoe, weakMargin, estimateRows, missing: state.analysisRows.length - collected.length })) {
+    lines.push(`- ${insight}`);
+  }
+  lines.push(``, `## 주요 회사`, ``);
+  lines.push(markdownMetricTable(rows.slice().sort((a, b) => chartValue(b, "operating_income") - chartValue(a, "operating_income")).slice(0, 10)));
+  lines.push(``, `## 비교군 요약`, ``);
+  lines.push(markdownGroupTable(rows));
+  lines.push(``, `## 데이터 품질 메모`, ``);
+  lines.push(`- 공식 영업수익 공백 후 추정 합산 사용: ${estimateRows.length}개`);
+  lines.push(`- 원문 PDF 확인 가능 행: ${rows.filter((row) => row.rcept_no).length}개`);
+  if (state.analysisWarnings.length) {
+    lines.push(`- 최근 경고: ${state.analysisWarnings.slice(0, 5).join("; ")}`);
+  } else {
+    lines.push(`- 경고 없음`);
+  }
+  return lines.join("\n");
+}
+
+function markdownMetricTable(rows) {
+  const headers = ["순위", "회사", "영업이익", "세전이익", "당기순이익", "ROE", "원문"];
+  const lines = [`| ${headers.join(" | ")} |`, `| ${headers.map(() => "---").join(" | ")} |`];
+  rows.forEach((row, index) => {
+    lines.push(`| ${index + 1} | ${markdownEscape(row.corp_name)} | ${formatMetric(chartValue(row, "operating_income"), "operating_income")} | ${formatMetric(chartValue(row, "pretax_income"), "pretax_income")} | ${formatMetric(chartValue(row, "net_income"), "net_income")} | ${formatMetric(chartValue(row, "roe"), "roe")} | ${row.rcept_no || ""} |`);
+  });
+  return lines.join("\n");
+}
+
+function markdownGroupTable(rows) {
+  const groups = new Map();
+  for (const row of rows) {
+    const group = companyGroup(row.corp_name);
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push(row);
+  }
+  const lines = [`| 비교군 | 회사 수 | 영업이익 중앙값 | 평균 ROE |`, `| --- | --- | --- | --- |`];
+  for (const [group, groupRows] of [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    lines.push(`| ${group} | ${groupRows.length} | ${formatMetric(median(values(groupRows, "operating_income")), "operating_income")} | ${formatMetric(avg(values(groupRows, "roe")), "roe")} |`);
+  }
+  return lines.join("\n");
 }
 
 function delimitedTable(rows, delimiter) {
@@ -472,6 +883,7 @@ function setBusy(busy) {
   $("analyzeButton").disabled = busy;
   $("filingsButton").disabled = busy;
   $("exportButton").disabled = busy || !currentRows().length;
+  $("reportButton").disabled = busy || !latestComparableRows().length;
 }
 
 function setStatus(message, isError = false) {

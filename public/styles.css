@@ -55,7 +55,7 @@ button:disabled {
   margin: 0 auto;
   padding: 18px;
   display: grid;
-  grid-template-rows: auto auto auto auto 1fr;
+  grid-template-rows: auto auto auto auto auto auto minmax(260px, 1fr);
   gap: 10px;
 }
 
@@ -167,7 +167,9 @@ select {
   text-align: right;
 }
 
-.chart-panel {
+.strategy-panel,
+.chart-panel,
+.trend-panel {
   min-height: 190px;
   display: grid;
   grid-template-rows: auto 1fr;
@@ -176,6 +178,106 @@ select {
   background: var(--panel);
   border: 1px solid var(--line-soft);
   border-radius: 8px;
+}
+
+.strategy-panel {
+  grid-template-rows: auto auto 1fr;
+}
+
+.strategy-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+}
+
+.strategy-header h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.kpi-card {
+  display: grid;
+  gap: 5px;
+  min-height: 92px;
+  padding: 10px;
+  background: #181818;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+}
+
+.kpi-card span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.kpi-card strong {
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-card small {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.strategy-split {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(320px, 1fr);
+  gap: 10px;
+}
+
+.insight-box,
+.group-box {
+  min-width: 0;
+  padding: 10px;
+  background: #181818;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+}
+
+.insight-box h3,
+.group-box h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.insight-box ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.mini-table {
+  width: 100%;
+  font-size: 13px;
+}
+
+.mini-table th,
+.mini-table td {
+  padding: 7px 8px;
+}
+
+.mini-table th {
+  position: static;
+}
+
+.empty-mini {
+  color: var(--muted);
+  min-height: 72px;
+  display: grid;
+  place-items: center;
 }
 
 .chart-toolbar {
@@ -250,6 +352,53 @@ select {
   color: var(--muted);
   border: 1px dashed var(--line);
   border-radius: 6px;
+}
+
+.trend-body {
+  min-height: 240px;
+}
+
+.trend-wrap {
+  display: grid;
+  gap: 8px;
+}
+
+.trend-wrap svg {
+  width: 100%;
+  min-height: 240px;
+  background: #151515;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+}
+
+.trend-axis {
+  stroke: #555;
+  stroke-dasharray: 4 5;
+}
+
+.trend-label,
+.trend-scale {
+  fill: var(--muted);
+  font-size: 12px;
+}
+
+.trend-legend {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: var(--muted);
+}
+
+.trend-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.trend-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
 }
 
 .table-zone {
@@ -432,6 +581,14 @@ tbody tr:nth-child(even) {
     grid-template-columns: minmax(100px, 130px) minmax(110px, 1fr) minmax(90px, 120px);
   }
 
+  .kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .strategy-split {
+    grid-template-columns: 1fr;
+  }
+
   #analyzeButton {
     margin-left: 0;
   }
@@ -454,6 +611,10 @@ tbody tr:nth-child(even) {
   .chart-toolbar {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .kpi-grid {
+    grid-template-columns: 1fr;
   }
 
   .chart-toolbar label {
