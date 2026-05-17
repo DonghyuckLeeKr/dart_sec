@@ -668,6 +668,7 @@ select {
 .graphic-empty {
   color: #cbd5e1;
   font-size: 12px;
+  line-height: 1.45;
 }
 
 .graphic-empty {
@@ -828,6 +829,14 @@ select {
   height: 7px;
   border-radius: 50%;
   background: var(--accent);
+}
+
+.insight-box li.is-warning {
+  color: #78350f;
+}
+
+.insight-box li.is-warning::before {
+  background: var(--amber);
 }
 
 .mini-table {
@@ -1113,6 +1122,7 @@ th:nth-child(2) {
   padding: 0 9px;
   color: #334155;
   font-size: 12px;
+  white-space: nowrap;
 }
 
 .doc-actions button:first-child {

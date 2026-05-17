@@ -49,6 +49,15 @@ const FS_DIV_LABELS = {
   OFS: "별도재무제표"
 };
 
+const AMOUNT_COLUMNS = new Set([
+  "operating_revenue",
+  "operating_revenue_estimate",
+  "operating_income",
+  "pretax_income",
+  "net_income",
+  "equity"
+]);
+
 const $ = (id) => document.getElementById(id);
 
 init().catch((error) => setStatus(error.message, true));
@@ -225,7 +234,7 @@ async function listFilings() {
     renderTable($("filingsTable"), state.filingRows, state.filingColumns);
     switchView("filings");
     switchWorkspace("data");
-    $("summaryLine").textContent = `공시 ${state.filingRows.length}건 | ${result.start}-${result.end}`;
+    $("summaryLine").textContent = `공시 ${state.filingRows.length}건 | ${formatDate(result.start)}-${formatDate(result.end)}`;
     $("warningText").textContent = "";
     setStatus("공시 조회 완료");
   } catch (error) {
@@ -262,7 +271,7 @@ function renderTable(table, rows, columns) {
         td.appendChild(statusChip(row[column]));
       } else {
         td.textContent = formatCell(row[column], column);
-        td.title = td.textContent;
+        td.title = formatFullCell(row[column], column) || td.textContent;
         applyCellTone(td, row[column], column);
       }
       tr.appendChild(td);
@@ -289,14 +298,14 @@ function documentActions(row) {
   wrap.className = "doc-actions";
   const viewButton = document.createElement("button");
   viewButton.type = "button";
-  viewButton.textContent = "보기";
+  viewButton.textContent = "원문 보기";
   viewButton.ariaLabel = `${row.corp_name || "회사"} 원문 PDF 보기`;
   viewButton.disabled = !row.rcept_no;
   viewButton.addEventListener("click", () => openPdfViewer(row));
 
   const downloadButton = document.createElement("button");
   downloadButton.type = "button";
-  downloadButton.textContent = "PDF";
+  downloadButton.textContent = "다운로드";
   downloadButton.ariaLabel = `${row.corp_name || "회사"} 원문 PDF 다운로드`;
   downloadButton.disabled = !row.rcept_no;
   downloadButton.addEventListener("click", () => downloadPdf(row));
@@ -333,7 +342,7 @@ function openPdfViewer(row) {
   state.pdfDownloadUrl = downloadUrl;
   state.lastFocusedElement = document.activeElement;
   $("pdfModalTitle").textContent = row.corp_name ? `${row.corp_name} 원문 보고서` : "원문 보고서";
-  $("pdfModalMeta").textContent = [row.report_label || row.report_nm, row.rcept_dt, row.rcept_no].filter(Boolean).join(" · ");
+  $("pdfModalMeta").textContent = [row.report_label || row.report_nm, formatDate(row.rcept_dt), row.rcept_no].filter(Boolean).join(" · ");
   $("pdfFrame").src = inlineUrl;
   $("pdfDownloadButton").dataset.fileName = fileName;
   $("pdfModal").classList.add("is-open");
@@ -425,6 +434,7 @@ function renderVisualPanel() {
   const estimateCount = estimateRows.length;
   const unavailableCount = Math.max(rows.length - officialCount - estimateCount, 0);
   const qualityTotal = Math.max(rows.length, 1);
+  const estimateNames = companyNamesSummary(estimateRows);
   $("qualityGraphic").innerHTML = `
     <div class="graphic-heading">
       <span>데이터 품질</span>
@@ -440,7 +450,7 @@ function renderVisualPanel() {
       <span><i class="estimate"></i>추정 ${estimateCount}</span>
       <span><i class="missing"></i>공백 ${unavailableCount}</span>
     </div>
-    <div class="graphic-foot">공식 영업수익 기준 우선</div>
+    <div class="graphic-foot">${estimateCount ? `추정 사용: ${htmlEscape(estimateNames)}` : "공식 영업수익 기준 우선"}</div>
   `;
 }
 
@@ -529,6 +539,7 @@ function renderStrategyDashboard() {
   for (const insight of buildInsights(rows, { topIncome, topRoe, weakMargin, estimateRows, missing })) {
     const li = document.createElement("li");
     li.textContent = insight;
+    if (isWarningInsight(insight)) li.classList.add("is-warning");
     insightList.appendChild(li);
   }
   renderGroupSummary(rows, groupSummary);
@@ -555,7 +566,7 @@ function buildInsights(rows, context) {
     insights.push(`${context.weakMargin.corp_name}의 공식 영업이익률은 ${formatMetric(weakMargin, "operating_margin")}로 수익성 점검 대상입니다.`);
   }
   if (context.estimateRows.length) {
-    insights.push(`영업수익 공식값이 비어 추정 합산을 쓴 회사가 ${context.estimateRows.length}개 있습니다. 원문 PDF 확인이 필요합니다.`);
+    insights.push(`${companyNamesSummary(context.estimateRows)}: 공식 영업수익이 비어 추정 합산을 사용했습니다. 원문 보기로 확인하세요.`);
   }
   if (context.missing > 0) {
     insights.push(`미확보 행 ${context.missing}건은 공시 접수 여부와 XBRL 계정 추출 상태를 확인해야 합니다.`);
@@ -812,6 +823,18 @@ function formatMetric(value, metric) {
   return Number.isFinite(value) ? formatCell(value, metric) : "-";
 }
 
+function companyNamesSummary(rows, visibleCount = 3) {
+  const names = rows.map((row) => row.corp_name).filter(Boolean);
+  if (!names.length) return `${rows.length}개 회사`;
+  const visible = names.slice(0, visibleCount).join(", ");
+  const extra = names.length - visibleCount;
+  return extra > 0 ? `${visible} 외 ${extra}개` : visible;
+}
+
+function isWarningInsight(text) {
+  return text.includes("추정") || text.includes("미확보") || text.includes("확인");
+}
+
 function isBlank(value) {
   return value === null || value === undefined || value === "";
 }
@@ -842,7 +865,7 @@ function downloadCurrentFile() {
   if (!rows.length) return;
   const format = $("exportFormatSelect").value;
   const name = `${state.activeView}_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "")}`;
-  const table = rows.map((row) => Object.fromEntries(columns.map((column) => [displayLabel(column), formatCell(row[column], column)])));
+  const table = rows.map((row) => Object.fromEntries(columns.map((column) => [displayLabel(column), formatFullCell(row[column], column)])));
 
   if (format === "json") {
     downloadBlob(`${name}.json`, JSON.stringify(table, null, 2), "application/json;charset=utf-8");
@@ -1071,15 +1094,43 @@ function sectorLabel(name) {
   return name;
 }
 
-function formatCell(value, column) {
+function formatCell(value, column, options = {}) {
   if (value === null || value === undefined || value === "") return "";
   if (column === "fs_div") return FS_DIV_LABELS[value] || String(value);
+  if (column === "rcept_dt") return formatDate(value);
   if (typeof value === "number") {
     if (isRatioColumn(column)) return `${(value * 100).toFixed(1)}%`;
     if (column === "rank_operating_income") return String(value);
+    if (options.compactAmounts !== false && AMOUNT_COLUMNS.has(column)) return formatAmountCompact(value);
     return new Intl.NumberFormat("ko-KR").format(value);
   }
   return String(value);
+}
+
+function formatFullCell(value, column) {
+  return formatCell(value, column, { compactAmounts: false });
+}
+
+function formatAmountCompact(value) {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000_000_000) {
+    const digits = abs >= 10_000_000_000_000 ? 1 : 2;
+    return `${trimFixed(value / 1_000_000_000_000, digits)}조`;
+  }
+  if (abs >= 100_000_000) {
+    return `${new Intl.NumberFormat("ko-KR").format(Math.round(value / 100_000_000))}억원`;
+  }
+  return new Intl.NumberFormat("ko-KR").format(value);
+}
+
+function trimFixed(value, digits) {
+  return value.toFixed(digits).replace(/\.0+$/, "").replace(/(\.\d*[1-9])0+$/, "$1");
+}
+
+function formatDate(value) {
+  if (value === null || value === undefined || value === "") return "";
+  const text = String(value);
+  return /^\d{8}$/.test(text) ? `${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}` : text;
 }
 
 function isRatioColumn(column) {

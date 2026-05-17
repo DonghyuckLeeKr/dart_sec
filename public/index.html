@@ -10,7 +10,7 @@
     <main class="app-shell">
       <header class="topbar">
         <div class="brand-block">
-          <span class="app-badge">OpenDART Live</span>
+          <span class="app-badge">DART 실시간 수집</span>
           <h1>DART Sector Analyzer</h1>
           <p id="summaryLine">증권사 정기보고서 재무실적 비교 보드</p>
         </div>
@@ -19,7 +19,7 @@
       <section class="control-surface" aria-label="조회 조건">
         <div class="surface-title">
           <strong>조회 조건</strong>
-          <span>OpenDART 정기보고서 기준</span>
+          <span>DART 정기보고서 기준</span>
         </div>
         <label>
           <span>섹터</span>
@@ -55,8 +55,8 @@
         </div>
         <div class="option-group">
           <label><input id="fallbackOfsInput" type="checkbox" checked /> <span>연결 없으면 별도</span></label>
-          <label><input id="xbrlFallbackInput" type="checkbox" checked /> <span>XBRL 보완</span></label>
-          <label><input id="finalOnlyInput" type="checkbox" checked /> <span>최종보고서</span></label>
+          <label><input id="xbrlFallbackInput" type="checkbox" checked /> <span>원문 XBRL 보완</span></label>
+          <label><input id="finalOnlyInput" type="checkbox" checked /> <span>최종본만</span></label>
         </div>
         <button id="analyzeButton" type="button">분석 실행</button>
         <button id="filingsButton" type="button">공시 조회</button>
@@ -76,7 +76,7 @@
       <section id="analysisWorkspace" class="workspace-section is-active" aria-label="분석 보드">
         <div class="section-heading">
           <div>
-            <span>Analysis</span>
+            <span>분석 요약</span>
             <h2>분석 보드</h2>
             <p>실데이터를 요약해 섹터 수준 의사결정 지표만 따로 보여줍니다.</p>
           </div>
@@ -172,7 +172,7 @@
         <div class="data-panel">
           <div class="data-header">
             <div>
-              <span>Raw Data</span>
+              <span>원천 데이터</span>
               <h2>실데이터</h2>
               <p id="dataSubtitle">수집된 재무 데이터와 공시 목록을 확인하고 파일로 변환합니다.</p>
             </div>
