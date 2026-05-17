@@ -210,6 +210,7 @@ function renderTable(table, rows, columns) {
     const tr = document.createElement("tr");
     for (const column of columns) {
       const td = document.createElement("td");
+      td.dataset.column = column;
       if (column === "pdf") {
         td.className = "document-column";
         td.appendChild(documentActions(row));
@@ -217,6 +218,7 @@ function renderTable(table, rows, columns) {
         td.appendChild(statusChip(row[column]));
       } else {
         td.textContent = formatCell(row[column], column);
+        applyCellTone(td, row[column], column);
       }
       tr.appendChild(td);
     }
@@ -242,12 +244,14 @@ function documentActions(row) {
   const viewButton = document.createElement("button");
   viewButton.type = "button";
   viewButton.textContent = "보기";
+  viewButton.ariaLabel = `${row.corp_name || "회사"} 원문 PDF 보기`;
   viewButton.disabled = !row.rcept_no;
   viewButton.addEventListener("click", () => openPdfViewer(row));
 
   const downloadButton = document.createElement("button");
   downloadButton.type = "button";
   downloadButton.textContent = "PDF";
+  downloadButton.ariaLabel = `${row.corp_name || "회사"} 원문 PDF 다운로드`;
   downloadButton.disabled = !row.rcept_no;
   downloadButton.addEventListener("click", () => downloadPdf(row));
 
@@ -260,6 +264,22 @@ function statusChip(value) {
   span.className = `status-chip ${value === "수집 완료" ? "" : "missing"}`;
   span.textContent = value || "미확보";
   return span;
+}
+
+function applyCellTone(cell, value, column) {
+  if (value === null || value === undefined || value === "") {
+    cell.classList.add("empty-cell");
+    return;
+  }
+  const parsed = numeric(value);
+  if (!Number.isFinite(parsed)) {
+    cell.classList.add("muted-cell");
+    return;
+  }
+  cell.classList.add("numeric-cell");
+  if (isRatioColumn(column)) cell.classList.add("ratio-cell");
+  if (parsed < 0) cell.classList.add("negative-cell");
+  if (parsed > 0) cell.classList.add("positive-cell");
 }
 
 function openPdfViewer(row) {
@@ -888,11 +908,12 @@ function setBusy(busy) {
   $("filingsButton").disabled = busy;
   $("exportButton").disabled = busy || !currentRows().length;
   $("reportButton").disabled = busy || !latestComparableRows().length;
+  document.querySelector(".status-line")?.classList.toggle("is-busy", busy);
 }
 
 function setStatus(message, isError = false) {
   $("statusText").textContent = message;
-  $("statusText").style.color = isError ? "var(--danger)" : "var(--muted)";
+  document.querySelector(".status-line")?.classList.toggle("is-error", isError);
 }
 
 function formatCell(value, column) {
