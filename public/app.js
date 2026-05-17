@@ -402,8 +402,9 @@ function buildInsights(rows, context) {
   if (context.topRoe) {
     insights.push(`ROE 상위는 ${context.topRoe.corp_name} ${formatMetric(context.topRoe.roe, "roe")}로 자본 효율성이 돋보입니다.`);
   }
-  if (context.weakMargin && Number(context.weakMargin.operating_margin) < 0.05) {
-    insights.push(`${context.weakMargin.corp_name}의 영업이익률은 ${formatMetric(context.weakMargin.operating_margin, "operating_margin")}로 수익성 점검 대상입니다.`);
+  const weakMargin = context.weakMargin ? numeric(context.weakMargin.operating_margin) : null;
+  if (Number.isFinite(weakMargin) && weakMargin < 0.05) {
+    insights.push(`${context.weakMargin.corp_name}의 공식 영업이익률은 ${formatMetric(weakMargin, "operating_margin")}로 수익성 점검 대상입니다.`);
   }
   if (context.estimateRows.length) {
     insights.push(`영업수익 공식값이 비어 추정 합산을 쓴 회사가 ${context.estimateRows.length}개 있습니다. 원문 PDF 확인이 필요합니다.`);
@@ -563,12 +564,15 @@ function svgText(x, y, text, className, anchor) {
 
 function chartValue(row, metric) {
   if (metric === "operating_revenue") {
-    return numeric(row.operating_revenue ?? row.operating_revenue_estimate);
+    const official = numeric(row.operating_revenue);
+    return Number.isFinite(official) ? official : numeric(row.operating_revenue_estimate);
   }
   return numeric(row[metric]);
 }
 
 function numeric(value) {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "string" && value.trim() === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
