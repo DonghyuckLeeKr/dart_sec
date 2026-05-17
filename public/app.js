@@ -5,6 +5,7 @@ const state = {
   analysisColumns: [],
   filingRows: [],
   filingColumns: [],
+  activeWorkspace: "analysis",
   activeView: "analysis",
   pdfDownloadUrl: "",
   lastFocusedElement: null,
@@ -89,6 +90,9 @@ function bindEvents() {
   document.querySelectorAll(".tab").forEach((button) => {
     button.addEventListener("click", () => switchView(button.dataset.view));
   });
+  document.querySelectorAll(".workspace-tab").forEach((button) => {
+    button.addEventListener("click", () => switchWorkspace(button.dataset.workspace));
+  });
 }
 
 function populateSectors(sectors) {
@@ -156,6 +160,7 @@ async function runAnalysis() {
     renderChart();
     renderTrend();
     renderVisualPanel();
+    switchWorkspace("analysis");
     switchView("analysis");
     const collected = state.analysisRows.filter((row) => row.collection_status === "수집 완료").length;
     $("summaryLine").textContent = `수집 ${collected}/${state.analysisRows.length} | 원천 ${combined.rawCount || 0}행`;
@@ -219,6 +224,7 @@ async function listFilings() {
     state.filingColumns = result.columns || state.filingColumns;
     renderTable($("filingsTable"), state.filingRows, state.filingColumns);
     switchView("filings");
+    switchWorkspace("data");
     $("summaryLine").textContent = `공시 ${state.filingRows.length}건 | ${result.start}-${result.end}`;
     $("warningText").textContent = "";
     setStatus("공시 조회 완료");
@@ -275,6 +281,7 @@ function renderTable(table, rows, columns) {
     tbody.appendChild(row);
   }
   $("exportButton").disabled = !currentRows().length;
+  updateDataSubtitle();
 }
 
 function documentActions(row) {
@@ -1008,12 +1015,22 @@ function selectedReports() {
   return [...document.querySelectorAll('input[name="report"]:checked')].map((input) => input.value);
 }
 
+function switchWorkspace(workspace) {
+  state.activeWorkspace = workspace === "data" ? "data" : "analysis";
+  document.querySelectorAll(".workspace-tab").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.workspace === state.activeWorkspace);
+  });
+  $("analysisWorkspace").classList.toggle("is-active", state.activeWorkspace === "analysis");
+  $("dataWorkspace").classList.toggle("is-active", state.activeWorkspace === "data");
+}
+
 function switchView(view) {
   state.activeView = view;
   document.querySelectorAll(".tab").forEach((button) => button.classList.toggle("is-active", button.dataset.view === view));
   $("analysisView").classList.toggle("is-active", view === "analysis");
   $("filingsView").classList.toggle("is-active", view === "filings");
   $("exportButton").disabled = !currentRows().length;
+  updateDataSubtitle();
 }
 
 function currentRows() {
@@ -1022,6 +1039,13 @@ function currentRows() {
 
 function currentColumns() {
   return state.activeView === "analysis" ? state.analysisColumns : state.filingColumns;
+}
+
+function updateDataSubtitle() {
+  const rows = currentRows();
+  const name = state.activeView === "analysis" ? "재무 분석 데이터" : "공시 조회 데이터";
+  const count = new Intl.NumberFormat("ko-KR").format(rows.length);
+  $("dataSubtitle").textContent = `${name} ${count}행을 확인하고 파일로 변환합니다.`;
 }
 
 function setBusy(busy) {

@@ -14,18 +14,6 @@
           <h1>DART Sector Analyzer</h1>
           <p id="summaryLine">증권사 정기보고서 재무실적 비교 보드</p>
         </div>
-        <div class="top-actions">
-          <select id="exportFormatSelect" aria-label="내보내기 형식">
-            <option value="csv">CSV</option>
-            <option value="tsv">TSV</option>
-            <option value="json">JSON</option>
-            <option value="md">Markdown</option>
-            <option value="xls">Excel</option>
-            <option value="html">HTML</option>
-          </select>
-          <button id="exportButton" type="button" disabled>내보내기</button>
-          <button id="reportButton" type="button" disabled>전략 리포트</button>
-        </div>
       </header>
 
       <section class="control-surface" aria-label="조회 조건">
@@ -80,98 +68,142 @@
         <span id="warningText"></span>
       </section>
 
-      <section id="visualPanel" class="visual-board" aria-label="분석 그래픽">
-        <div class="visual-title">
-          <span>섹터 스냅샷</span>
-          <h2>수익성·규모·데이터 품질</h2>
-          <p id="visualSubtitle">분석 결과가 나오면 섹터 상태를 그래픽으로 요약합니다.</p>
-        </div>
-        <div id="coverageGraphic" class="graphic-card"></div>
-        <div id="leaderGraphic" class="graphic-card graphic-card-wide"></div>
-        <div id="qualityGraphic" class="graphic-card"></div>
+      <section class="workspace-switcher" aria-label="작업 화면">
+        <button class="workspace-tab is-active" type="button" data-workspace="analysis">분석 보드</button>
+        <button class="workspace-tab" type="button" data-workspace="data">실데이터</button>
       </section>
 
-      <section id="strategyPanel" class="strategy-panel" aria-label="전략 요약">
-        <div class="strategy-header">
+      <section id="analysisWorkspace" class="workspace-section is-active" aria-label="분석 보드">
+        <div class="section-heading">
           <div>
-            <h2>전략 요약</h2>
-            <p id="strategySubtitle">분석 결과가 나오면 핵심 판단 지표를 요약합니다.</p>
+            <span>Analysis</span>
+            <h2>분석 보드</h2>
+            <p>실데이터를 요약해 섹터 수준 의사결정 지표만 따로 보여줍니다.</p>
           </div>
+          <button id="reportButton" type="button" disabled>전략 리포트</button>
         </div>
-        <div id="kpiGrid" class="kpi-grid">
-          <div class="empty-chart">데이터 없음</div>
-        </div>
-        <div class="strategy-split">
-          <section class="insight-box" aria-label="핵심 인사이트">
-            <h3>핵심 인사이트</h3>
-            <ul id="insightList"></ul>
+
+        <section id="visualPanel" class="visual-board" aria-label="분석 그래픽">
+          <div class="visual-title">
+            <span>섹터 스냅샷</span>
+            <h2>수익성·규모·데이터 품질</h2>
+            <p id="visualSubtitle">분석 결과가 나오면 섹터 상태를 그래픽으로 요약합니다.</p>
+          </div>
+          <div id="coverageGraphic" class="graphic-card"></div>
+          <div id="leaderGraphic" class="graphic-card graphic-card-wide"></div>
+          <div id="qualityGraphic" class="graphic-card"></div>
+        </section>
+
+        <section id="strategyPanel" class="strategy-panel" aria-label="전략 요약">
+          <div class="strategy-header">
+            <div>
+              <h2>전략 요약</h2>
+              <p id="strategySubtitle">분석 결과가 나오면 핵심 판단 지표를 요약합니다.</p>
+            </div>
+          </div>
+          <div id="kpiGrid" class="kpi-grid">
+            <div class="empty-chart">데이터 없음</div>
+          </div>
+          <div class="strategy-split">
+            <section class="insight-box" aria-label="핵심 인사이트">
+              <h3>핵심 인사이트</h3>
+              <ul id="insightList"></ul>
+            </section>
+            <section class="group-box" aria-label="비교군 요약">
+              <h3>비교군 요약</h3>
+              <div id="groupSummary"></div>
+            </section>
+          </div>
+        </section>
+
+        <div class="analysis-grid">
+          <section id="chartPanel" class="chart-panel" aria-label="비교 그래프">
+            <div class="chart-toolbar">
+              <div>
+                <h2>섹터 비교</h2>
+                <p id="chartSubtitle">분석 결과가 나오면 회사별 지표를 비교합니다.</p>
+              </div>
+              <label>
+                <span>비교 지표</span>
+                <select id="chartMetricSelect">
+                  <option value="operating_income">영업이익</option>
+                  <option value="pretax_income">세전이익</option>
+                  <option value="net_income">당기순이익</option>
+                  <option value="operating_revenue">영업수익</option>
+                  <option value="equity">자본총계</option>
+                  <option value="operating_margin">영업이익률</option>
+                  <option value="roe">ROE</option>
+                  <option value="debt_ratio">부채비율</option>
+                </select>
+              </label>
+            </div>
+            <div id="chartBody" class="chart-body">
+              <div class="empty-chart">데이터 없음</div>
+            </div>
           </section>
-          <section class="group-box" aria-label="비교군 요약">
-            <h3>비교군 요약</h3>
-            <div id="groupSummary"></div>
+
+          <section id="trendPanel" class="trend-panel" aria-label="시계열 추이">
+            <div class="chart-toolbar">
+              <div>
+                <h2>시계열 추이</h2>
+                <p id="trendSubtitle">여러 연도나 보고서를 선택하면 주요 회사의 흐름을 보여줍니다.</p>
+              </div>
+              <label>
+                <span>추이 지표</span>
+                <select id="trendMetricSelect">
+                  <option value="operating_income">영업이익</option>
+                  <option value="pretax_income">세전이익</option>
+                  <option value="net_income">당기순이익</option>
+                  <option value="operating_revenue">영업수익</option>
+                  <option value="equity">자본총계</option>
+                  <option value="operating_margin">영업이익률</option>
+                  <option value="roe">ROE</option>
+                </select>
+              </label>
+            </div>
+            <div id="trendBody" class="trend-body">
+              <div class="empty-chart">데이터 없음</div>
+            </div>
           </section>
         </div>
       </section>
 
-      <section id="chartPanel" class="chart-panel" aria-label="비교 그래프">
-        <div class="chart-toolbar">
-          <div>
-            <h2>섹터 비교</h2>
-            <p id="chartSubtitle">분석 결과가 나오면 회사별 지표를 비교합니다.</p>
+      <section id="dataWorkspace" class="workspace-section" aria-label="실데이터">
+        <div class="data-panel">
+          <div class="data-header">
+            <div>
+              <span>Raw Data</span>
+              <h2>실데이터</h2>
+              <p id="dataSubtitle">수집된 재무 데이터와 공시 목록을 확인하고 파일로 변환합니다.</p>
+            </div>
+            <div class="export-actions" aria-label="파일 변환">
+              <label>
+                <span>파일 변환</span>
+                <select id="exportFormatSelect" aria-label="내보내기 형식">
+                  <option value="csv">CSV</option>
+                  <option value="tsv">TSV</option>
+                  <option value="json">JSON</option>
+                  <option value="md">Markdown</option>
+                  <option value="xls">Excel</option>
+                  <option value="html">HTML</option>
+                </select>
+              </label>
+              <button id="exportButton" type="button" disabled>변환 다운로드</button>
+            </div>
           </div>
-          <label>
-            <span>비교 지표</span>
-            <select id="chartMetricSelect">
-              <option value="operating_income">영업이익</option>
-              <option value="pretax_income">세전이익</option>
-              <option value="net_income">당기순이익</option>
-              <option value="operating_revenue">영업수익</option>
-              <option value="equity">자본총계</option>
-              <option value="operating_margin">영업이익률</option>
-              <option value="roe">ROE</option>
-              <option value="debt_ratio">부채비율</option>
-            </select>
-          </label>
-        </div>
-        <div id="chartBody" class="chart-body">
-          <div class="empty-chart">데이터 없음</div>
-        </div>
-      </section>
 
-      <section id="trendPanel" class="trend-panel" aria-label="시계열 추이">
-        <div class="chart-toolbar">
-          <div>
-            <h2>시계열 추이</h2>
-            <p id="trendSubtitle">여러 연도나 보고서를 선택하면 주요 회사의 흐름을 보여줍니다.</p>
-          </div>
-          <label>
-            <span>추이 지표</span>
-            <select id="trendMetricSelect">
-              <option value="operating_income">영업이익</option>
-              <option value="pretax_income">세전이익</option>
-              <option value="net_income">당기순이익</option>
-              <option value="operating_revenue">영업수익</option>
-              <option value="equity">자본총계</option>
-              <option value="operating_margin">영업이익률</option>
-              <option value="roe">ROE</option>
-            </select>
-          </label>
-        </div>
-        <div id="trendBody" class="trend-body">
-          <div class="empty-chart">데이터 없음</div>
-        </div>
-      </section>
-
-      <section class="table-zone">
-        <div class="table-tabs" role="tablist">
-          <button class="tab is-active" type="button" data-view="analysis">재무 분석</button>
-          <button class="tab" type="button" data-view="filings">공시 조회</button>
-        </div>
-        <div id="analysisView" class="table-view is-active">
-          <table id="analysisTable"></table>
-        </div>
-        <div id="filingsView" class="table-view">
-          <table id="filingsTable"></table>
+          <section class="table-zone">
+            <div class="table-tabs" role="tablist">
+              <button class="tab is-active" type="button" data-view="analysis">재무 분석</button>
+              <button class="tab" type="button" data-view="filings">공시 조회</button>
+            </div>
+            <div id="analysisView" class="table-view is-active">
+              <table id="analysisTable"></table>
+            </div>
+            <div id="filingsView" class="table-view">
+              <table id="filingsTable"></table>
+            </div>
+          </section>
         </div>
       </section>
     </main>
@@ -193,6 +225,6 @@
       </section>
     </div>
 
-    <script type="module" src="/app.js?v=20260517-visual-labels"></script>
+    <script type="module" src="/app.js?v=20260517-sectioned-data"></script>
   </body>
 </html>
