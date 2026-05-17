@@ -461,9 +461,7 @@ function graphicEmpty(title, text) {
 function renderChart() {
   const metric = $("chartMetricSelect").value;
   const rows = state.analysisRows
-    .filter((row) => row.collection_status === "수집 완료")
-    .map((row) => ({ row, value: chartValue(row, metric) }))
-    .filter((item) => Number.isFinite(item.value));
+    .map((row) => ({ row, value: chartValue(row, metric) }));
   const chartBody = $("chartBody");
   chartBody.innerHTML = "";
   const isEmpty = !rows.length;
@@ -475,15 +473,17 @@ function renderChart() {
     return;
   }
 
-  rows.sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
-  const visibleRows = rows.slice(0, 12);
-  const maxAbs = Math.max(...visibleRows.map((item) => Math.abs(item.value)), 1);
-  $("chartSubtitle").textContent = `${displayLabel(metric)} 기준 상위 ${visibleRows.length}개`;
+  rows.sort(compareChartRows);
+  const valuedCount = rows.filter((item) => Number.isFinite(item.value)).length;
+  const noValueCount = rows.length - valuedCount;
+  const maxAbs = Math.max(...rows.filter((item) => Number.isFinite(item.value)).map((item) => Math.abs(item.value)), 1);
+  $("chartSubtitle").textContent = `${displayLabel(metric)} 기준 전체 ${rows.length}개${noValueCount ? ` · 값 없음 ${noValueCount}개` : ""}`;
 
-  for (const item of visibleRows) {
-    const percent = Math.max(2, Math.round((Math.abs(item.value) / maxAbs) * 100));
+  for (const item of rows) {
+    const hasValue = Number.isFinite(item.value);
+    const percent = hasValue ? Math.max(2, Math.round((Math.abs(item.value) / maxAbs) * 100)) : 0;
     const line = document.createElement("div");
-    line.className = "chart-row";
+    line.className = `chart-row ${hasValue ? "" : "no-value"}`.trim();
     const name = document.createElement("div");
     name.className = "chart-name";
     name.textContent = item.row.corp_name || "";
@@ -492,13 +492,27 @@ function renderChart() {
     const bar = document.createElement("div");
     bar.className = `chart-bar ${item.value < 0 ? "negative" : ""}`;
     bar.style.width = `${percent}%`;
-    track.appendChild(bar);
+    if (hasValue) track.appendChild(bar);
     const value = document.createElement("div");
     value.className = "chart-value";
-    value.textContent = formatCell(item.value, metric);
+    value.textContent = hasValue ? formatCell(item.value, metric) : chartMissingLabel(item.row);
+    if (!hasValue && item.row.failure_reason) value.title = item.row.failure_reason;
     line.append(name, track, value);
     chartBody.appendChild(line);
   }
+}
+
+function compareChartRows(a, b) {
+  const aHasValue = Number.isFinite(a.value);
+  const bHasValue = Number.isFinite(b.value);
+  if (aHasValue && bHasValue) return b.value - a.value;
+  if (aHasValue) return -1;
+  if (bHasValue) return 1;
+  return String(a.row.corp_name || "").localeCompare(String(b.row.corp_name || ""), "ko-KR");
+}
+
+function chartMissingLabel(row) {
+  return row.collection_status === "수집 완료" ? "값 없음" : "미확보";
 }
 
 function renderStrategyDashboard() {
