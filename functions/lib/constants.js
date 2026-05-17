@@ -13,6 +13,7 @@ export const COLUMN_LABELS = {
   stock_code: "종목코드",
   bsns_year: "사업연도",
   report_label: "보고서명",
+  report_nm: "공시명",
   fs_div: "재무제표",
   collection_status: "수집상태",
   failure_reason: "미확보사유",

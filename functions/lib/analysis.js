@@ -1,4 +1,4 @@
-import { FILING_COLUMNS, METRIC_COLUMNS, REPORT_CODE_TO_KEY, REPORT_KINDS } from "./constants.js";
+import { COLUMN_LABELS, FILING_COLUMNS, METRIC_COLUMNS, REPORT_CODE_TO_KEY, REPORT_KINDS } from "./constants.js";
 import { financialStatement, searchDisclosures, xbrlDocument } from "./dart.js";
 import { resolveCompanies, sectorNames, SECTORS } from "./sectors.js";
 import { parseXbrlFinancialStatement } from "./xbrl.js";
@@ -61,6 +61,7 @@ export function configPayload() {
   return {
     sectors: sectorNames().map((name) => ({ name, description: SECTORS[name].description, companyCount: SECTORS[name].companies.length })),
     reports: REPORT_KINDS,
+    labels: COLUMN_LABELS,
     metricColumns: METRIC_COLUMNS,
     filingColumns: FILING_COLUMNS
   };

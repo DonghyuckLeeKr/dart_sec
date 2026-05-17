@@ -13,6 +13,41 @@ const state = {
   lastAnalysisPayload: null
 };
 
+const DEFAULT_LABELS = {
+  rank_operating_income: "영업이익순위",
+  corp_name: "회사명",
+  stock_code: "종목코드",
+  bsns_year: "사업연도",
+  report_label: "보고서명",
+  report_nm: "공시명",
+  pdf: "원문",
+  fs_div: "재무제표",
+  collection_status: "수집상태",
+  failure_reason: "미확보사유",
+  data_source: "데이터출처",
+  operating_revenue: "영업수익(공식)",
+  operating_revenue_estimate: "영업수익(추정)",
+  operating_revenue_estimate_basis: "영업수익(추정) 기준",
+  operating_income: "영업이익",
+  operating_income_yoy: "영업이익 YoY",
+  pretax_income: "세전이익",
+  pretax_income_yoy: "세전이익 YoY",
+  net_income: "당기순이익",
+  net_income_yoy: "당기순이익 YoY",
+  equity: "자본총계(자기자본)",
+  operating_margin: "영업이익률",
+  operating_margin_estimate: "영업이익률(추정)",
+  roe: "ROE",
+  debt_ratio: "부채비율",
+  rcept_dt: "접수일",
+  rcept_no: "접수번호"
+};
+
+const FS_DIV_LABELS = {
+  CFS: "연결재무제표",
+  OFS: "별도재무제표"
+};
+
 const $ = (id) => document.getElementById(id);
 
 init().catch((error) => setStatus(error.message, true));
@@ -20,7 +55,7 @@ init().catch((error) => setStatus(error.message, true));
 async function init() {
   bindEvents();
   const config = await apiGet("/api/config");
-  state.labels = config.labels || {};
+  state.labels = { ...DEFAULT_LABELS, ...(config.labels || {}) };
   state.sectors = config.sectors || [];
   populateSectors(state.sectors);
   state.analysisColumns = config.metricColumns || [];
@@ -30,6 +65,7 @@ async function init() {
   renderStrategyDashboard();
   renderChart();
   renderTrend();
+  renderVisualPanel();
   setStatus("대기 중");
 }
 
@@ -61,7 +97,8 @@ function populateSectors(sectors) {
   for (const sector of sectors) {
     const option = document.createElement("option");
     option.value = sector.name;
-    option.textContent = `${sector.name} (${sector.companyCount})`;
+    option.textContent = `${sectorLabel(sector.name)} (${sector.companyCount})`;
+    option.title = sector.description || sector.name;
     select.appendChild(option);
   }
 }
@@ -118,6 +155,7 @@ async function runAnalysis() {
     renderStrategyDashboard();
     renderChart();
     renderTrend();
+    renderVisualPanel();
     switchView("analysis");
     const collected = state.analysisRows.filter((row) => row.collection_status === "수집 완료").length;
     $("summaryLine").textContent = `수집 ${collected}/${state.analysisRows.length} | 원천 ${combined.rawCount || 0}행`;
@@ -198,7 +236,7 @@ function renderTable(table, rows, columns) {
   const headRow = document.createElement("tr");
   for (const column of columns) {
     const th = document.createElement("th");
-    th.textContent = state.labels[column] || column;
+    th.textContent = displayLabel(column);
     if (column === "pdf") th.className = "document-column";
     headRow.appendChild(th);
   }
@@ -218,6 +256,7 @@ function renderTable(table, rows, columns) {
         td.appendChild(statusChip(row[column]));
       } else {
         td.textContent = formatCell(row[column], column);
+        td.title = td.textContent;
         applyCellTone(td, row[column], column);
       }
       tr.appendChild(td);
@@ -320,6 +359,88 @@ function pdfUrls(row) {
   return { fileName, downloadUrl, inlineUrl: `/api/pdf?${params}` };
 }
 
+function renderVisualPanel() {
+  const rows = latestComparableRows();
+  const collected = state.analysisRows.filter((row) => row.collection_status === "수집 완료");
+  const total = state.analysisRows.length;
+  const missing = Math.max(total - collected.length, 0);
+  const estimateRows = rows.filter((row) => isBlank(row.operating_revenue) && !isBlank(row.operating_revenue_estimate));
+  const officialRevenueRows = rows.filter((row) => !isBlank(row.operating_revenue));
+  const coverage = total ? collected.length / total : 0;
+
+  if (!total) {
+    $("visualSubtitle").textContent = "분석 결과가 나오면 섹터 상태를 그래픽으로 요약합니다.";
+    $("coverageGraphic").innerHTML = graphicEmpty("수집 커버리지", "대기 중");
+    $("leaderGraphic").innerHTML = graphicEmpty("영업이익 리더", "대기 중");
+    $("qualityGraphic").innerHTML = graphicEmpty("데이터 품질", "대기 중");
+    return;
+  }
+
+  const period = rows[0] ? periodLabel(rows[0]) : "선택 기간";
+  $("visualSubtitle").textContent = `${period} 기준 ${rows.length}개 회사`;
+  $("coverageGraphic").innerHTML = `
+    <div class="graphic-heading">
+      <span>수집 커버리지</span>
+      <strong>${htmlEscape(percent(collected.length, total))}</strong>
+    </div>
+    <div class="donut-wrap">
+      <div class="donut" style="--coverage:${Math.round(coverage * 360)}deg">
+        <span>${collected.length}/${total}</span>
+        <small>수집</small>
+      </div>
+    </div>
+    <div class="graphic-foot">${missing ? `미확보 ${missing}건` : "전체 수집 완료"}</div>
+  `;
+
+  const leaders = rows
+    .map((row) => ({ row, value: chartValue(row, "operating_income") }))
+    .filter((item) => Number.isFinite(item.value))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5);
+  const maxLeader = Math.max(...leaders.map((item) => Math.abs(item.value)), 1);
+  $("leaderGraphic").innerHTML = `
+    <div class="graphic-heading">
+      <span>영업이익 리더</span>
+      <strong>${leaders[0] ? htmlEscape(leaders[0].row.corp_name) : "-"}</strong>
+    </div>
+    <div class="leader-bars">
+      ${leaders.map((item, index) => `
+        <div class="leader-row">
+          <span>${index + 1}. ${htmlEscape(item.row.corp_name || "")}</span>
+          <div class="leader-track"><i class="${item.value < 0 ? "is-negative" : ""}" style="width:${Math.max(4, Math.round((Math.abs(item.value) / maxLeader) * 100))}%"></i></div>
+          <b>${htmlEscape(formatMetric(item.value, "operating_income"))}</b>
+        </div>
+      `).join("")}
+    </div>
+  `;
+
+  const officialCount = officialRevenueRows.length;
+  const estimateCount = estimateRows.length;
+  const unavailableCount = Math.max(rows.length - officialCount - estimateCount, 0);
+  const qualityTotal = Math.max(rows.length, 1);
+  $("qualityGraphic").innerHTML = `
+    <div class="graphic-heading">
+      <span>데이터 품질</span>
+      <strong>${officialCount}개 공식</strong>
+    </div>
+    <div class="quality-stack" aria-label="공식 ${officialCount}개, 추정 ${estimateCount}개, 공백 ${unavailableCount}개">
+      <i class="official" style="width:${(officialCount / qualityTotal) * 100}%"></i>
+      <i class="estimate" style="width:${(estimateCount / qualityTotal) * 100}%"></i>
+      <i class="missing" style="width:${(unavailableCount / qualityTotal) * 100}%"></i>
+    </div>
+    <div class="quality-legend">
+      <span><i class="official"></i>공식 ${officialCount}</span>
+      <span><i class="estimate"></i>추정 ${estimateCount}</span>
+      <span><i class="missing"></i>공백 ${unavailableCount}</span>
+    </div>
+    <div class="graphic-foot">공식 영업수익 기준 우선</div>
+  `;
+}
+
+function graphicEmpty(title, text) {
+  return `<div class="graphic-heading"><span>${htmlEscape(title)}</span><strong>-</strong></div><div class="graphic-empty">${htmlEscape(text)}</div>`;
+}
+
 function renderChart() {
   const metric = $("chartMetricSelect").value;
   const rows = state.analysisRows
@@ -337,7 +458,7 @@ function renderChart() {
   rows.sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
   const visibleRows = rows.slice(0, 12);
   const maxAbs = Math.max(...visibleRows.map((item) => Math.abs(item.value)), 1);
-  $("chartSubtitle").textContent = `${state.labels[metric] || metric} 기준 상위 ${visibleRows.length}개`;
+  $("chartSubtitle").textContent = `${displayLabel(metric)} 기준 상위 ${visibleRows.length}개`;
 
   for (const item of visibleRows) {
     const percent = Math.max(2, Math.round((Math.abs(item.value) / maxAbs) * 100));
@@ -496,7 +617,7 @@ function renderTrend() {
     return;
   }
 
-  $("trendSubtitle").textContent = `${state.labels[metric] || metric} 기준 주요 ${series.length}개 회사`;
+  $("trendSubtitle").textContent = `${displayLabel(metric)} 기준 주요 ${series.length}개 회사`;
   trendBody.appendChild(trendSvg(series, periods, metric));
 }
 
@@ -517,7 +638,7 @@ function trendSvg(series, periods, metric) {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", `${state.labels[metric] || metric} 추이`);
+  svg.setAttribute("aria-label", `${displayLabel(metric)} 추이`);
 
   svg.appendChild(svgLine(pad.left, yFor(0), width - pad.right, yFor(0), "trend-axis"));
   periods.forEach((period, index) => {
@@ -714,7 +835,7 @@ function downloadCurrentFile() {
   if (!rows.length) return;
   const format = $("exportFormatSelect").value;
   const name = `${state.activeView}_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "")}`;
-  const table = rows.map((row) => Object.fromEntries(columns.map((column) => [state.labels[column] || column, row[column] ?? ""])));
+  const table = rows.map((row) => Object.fromEntries(columns.map((column) => [displayLabel(column), formatCell(row[column], column)])));
 
   if (format === "json") {
     downloadBlob(`${name}.json`, JSON.stringify(table, null, 2), "application/json;charset=utf-8");
@@ -916,8 +1037,19 @@ function setStatus(message, isError = false) {
   document.querySelector(".status-line")?.classList.toggle("is-error", isError);
 }
 
+function displayLabel(column) {
+  return state.labels[column] || DEFAULT_LABELS[column] || column;
+}
+
+function sectorLabel(name) {
+  if (name === "securities") return "증권사 전체";
+  if (name === "securities_listed") return "상장 증권사";
+  return name;
+}
+
 function formatCell(value, column) {
   if (value === null || value === undefined || value === "") return "";
+  if (column === "fs_div") return FS_DIV_LABELS[value] || String(value);
   if (typeof value === "number") {
     if (isRatioColumn(column)) return `${(value * 100).toFixed(1)}%`;
     if (column === "rank_operating_income") return String(value);
