@@ -33,7 +33,7 @@ export const COLUMN_LABELS = {
   debt_ratio: "부채비율",
   rcept_dt: "접수일",
   rcept_no: "접수번호",
-  pdf: "PDF"
+  pdf: "원문"
 };
 
 export const METRIC_COLUMNS = [
@@ -42,6 +42,7 @@ export const METRIC_COLUMNS = [
   "stock_code",
   "bsns_year",
   "report_label",
+  "pdf",
   "fs_div",
   "collection_status",
   "failure_reason",
@@ -61,8 +62,7 @@ export const METRIC_COLUMNS = [
   "roe",
   "debt_ratio",
   "rcept_dt",
-  "rcept_no",
-  "pdf"
+  "rcept_no"
 ];
 
-export const FILING_COLUMNS = ["rcept_dt", "corp_name", "stock_code", "report_nm", "rcept_no", "pdf"];
+export const FILING_COLUMNS = ["rcept_dt", "corp_name", "stock_code", "report_nm", "pdf", "rcept_no"];

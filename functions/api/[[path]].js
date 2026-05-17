@@ -44,11 +44,12 @@ export async function onRequest(context) {
         return json({ ok: false, error: "접수번호 형식이 올바르지 않습니다." }, 400);
       }
       const fileName = sanitizeFileName(url.searchParams.get("fileName") || `${rceptNo}.pdf`);
+      const disposition = url.searchParams.get("inline") === "true" ? "inline" : "attachment";
       const { bytes } = await fetchPdf(rceptNo);
       return new Response(bytes, {
         headers: {
           "content-type": "application/pdf",
-          "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+          "content-disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(fileName)}`,
           "cache-control": "private, max-age=300",
           ...corsHeaders()
         }

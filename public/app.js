@@ -5,7 +5,9 @@ const state = {
   analysisColumns: [],
   filingRows: [],
   filingColumns: [],
-  activeView: "analysis"
+  activeView: "analysis",
+  pdfDownloadUrl: "",
+  lastFocusedElement: null
 };
 
 const $ = (id) => document.getElementById(id);
@@ -22,13 +24,25 @@ async function init() {
   state.filingColumns = config.filingColumns || [];
   renderTable($("analysisTable"), [], state.analysisColumns);
   renderTable($("filingsTable"), [], state.filingColumns);
+  renderChart();
   setStatus("대기 중");
 }
 
 function bindEvents() {
   $("analyzeButton").addEventListener("click", runAnalysis);
   $("filingsButton").addEventListener("click", listFilings);
-  $("downloadCsvButton").addEventListener("click", downloadCurrentCsv);
+  $("exportButton").addEventListener("click", downloadCurrentFile);
+  $("chartMetricSelect").addEventListener("change", renderChart);
+  $("pdfCloseButton").addEventListener("click", closePdfViewer);
+  $("pdfDownloadButton").addEventListener("click", () => {
+    if (state.pdfDownloadUrl) downloadUrl(state.pdfDownloadUrl);
+  });
+  document.querySelectorAll("[data-close-pdf]").forEach((element) => {
+    element.addEventListener("click", closePdfViewer);
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closePdfViewer();
+  });
   document.querySelectorAll(".tab").forEach((button) => {
     button.addEventListener("click", () => switchView(button.dataset.view));
   });
@@ -66,7 +80,7 @@ async function runAnalysis() {
   setStatus(`분석 중: ${payload.years.join(", ")} / ${payload.reports.length}개 보고서`);
   try {
     const totalCompanies = selectedCompanyCount(payload.sector, payload.limit);
-    const batchSize = analysisBatchSize(payload);
+    const batchSize = analysisBatchSize();
     const batches = [];
     for (let offset = 0; offset < totalCompanies; offset += batchSize) {
       batches.push({ offset, limit: Math.min(batchSize, totalCompanies - offset) });
@@ -91,6 +105,7 @@ async function runAnalysis() {
     state.analysisRows = rerankRows(combined.rows);
     state.analysisColumns = combined.columns || state.analysisColumns;
     renderTable($("analysisTable"), state.analysisRows, state.analysisColumns);
+    renderChart();
     switchView("analysis");
     const collected = state.analysisRows.filter((row) => row.collection_status === "수집 완료").length;
     $("summaryLine").textContent = `수집 ${collected}/${state.analysisRows.length} | 원천 ${combined.rawCount || 0}행`;
@@ -110,7 +125,7 @@ function selectedCompanyCount(sectorName, limit) {
   return requested > 0 ? Math.min(requested, sectorCount || requested) : sectorCount;
 }
 
-function analysisBatchSize(payload) {
+function analysisBatchSize() {
   return 1;
 }
 
@@ -172,6 +187,7 @@ function renderTable(table, rows, columns) {
   for (const column of columns) {
     const th = document.createElement("th");
     th.textContent = state.labels[column] || column;
+    if (column === "pdf") th.className = "document-column";
     headRow.appendChild(th);
   }
   thead.appendChild(headRow);
@@ -183,7 +199,8 @@ function renderTable(table, rows, columns) {
     for (const column of columns) {
       const td = document.createElement("td");
       if (column === "pdf") {
-        td.appendChild(pdfButton(row));
+        td.className = "document-column";
+        td.appendChild(documentActions(row));
       } else if (column === "collection_status") {
         td.appendChild(statusChip(row[column]));
       } else {
@@ -204,17 +221,26 @@ function renderTable(table, rows, columns) {
     row.appendChild(cell);
     tbody.appendChild(row);
   }
-  $("downloadCsvButton").disabled = !currentRows().length;
+  $("exportButton").disabled = !currentRows().length;
 }
 
-function pdfButton(row) {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "pdf-button";
-  button.textContent = "PDF";
-  button.disabled = !row.rcept_no;
-  button.addEventListener("click", () => downloadPdf(row));
-  return button;
+function documentActions(row) {
+  const wrap = document.createElement("div");
+  wrap.className = "doc-actions";
+  const viewButton = document.createElement("button");
+  viewButton.type = "button";
+  viewButton.textContent = "보기";
+  viewButton.disabled = !row.rcept_no;
+  viewButton.addEventListener("click", () => openPdfViewer(row));
+
+  const downloadButton = document.createElement("button");
+  downloadButton.type = "button";
+  downloadButton.textContent = "PDF";
+  downloadButton.disabled = !row.rcept_no;
+  downloadButton.addEventListener("click", () => downloadPdf(row));
+
+  wrap.append(viewButton, downloadButton);
+  return wrap;
 }
 
 function statusChip(value) {
@@ -224,47 +250,183 @@ function statusChip(value) {
   return span;
 }
 
+function openPdfViewer(row) {
+  const { inlineUrl, downloadUrl, fileName } = pdfUrls(row);
+  state.pdfDownloadUrl = downloadUrl;
+  state.lastFocusedElement = document.activeElement;
+  $("pdfModalTitle").textContent = row.corp_name ? `${row.corp_name} 원문 보고서` : "원문 보고서";
+  $("pdfModalMeta").textContent = [row.report_label || row.report_nm, row.rcept_dt, row.rcept_no].filter(Boolean).join(" · ");
+  $("pdfFrame").src = inlineUrl;
+  $("pdfDownloadButton").dataset.fileName = fileName;
+  $("pdfModal").classList.add("is-open");
+  $("pdfModal").setAttribute("aria-hidden", "false");
+  $("pdfCloseButton").focus();
+}
+
+function closePdfViewer() {
+  const modal = $("pdfModal");
+  if (!modal.classList.contains("is-open")) return;
+  const restoreFocus = state.lastFocusedElement instanceof HTMLElement ? state.lastFocusedElement : $("analyzeButton");
+  restoreFocus.focus();
+  modal.classList.remove("is-open");
+  modal.setAttribute("aria-hidden", "true");
+  $("pdfFrame").src = "about:blank";
+  state.pdfDownloadUrl = "";
+  state.lastFocusedElement = null;
+}
+
 function downloadPdf(row) {
+  downloadUrl(pdfUrls(row).downloadUrl);
+}
+
+function pdfUrls(row) {
   const label = row.report_label || row.report_nm || "report";
   const fileName = sanitizeFileName(`${row.rcept_dt || ""}_${row.corp_name || ""}_${label}_${row.rcept_no}.pdf`);
-  const url = `/api/pdf?rceptNo=${encodeURIComponent(row.rcept_no)}&fileName=${encodeURIComponent(fileName)}`;
+  const params = new URLSearchParams({ rceptNo: row.rcept_no, fileName });
+  const downloadUrl = `/api/pdf?${params}`;
+  params.set("inline", "true");
+  return { fileName, downloadUrl, inlineUrl: `/api/pdf?${params}` };
+}
+
+function renderChart() {
+  const metric = $("chartMetricSelect").value;
+  const rows = state.analysisRows
+    .filter((row) => row.collection_status === "수집 완료")
+    .map((row) => ({ row, value: chartValue(row, metric) }))
+    .filter((item) => Number.isFinite(item.value));
+  const chartBody = $("chartBody");
+  chartBody.innerHTML = "";
+  if (!rows.length) {
+    chartBody.innerHTML = `<div class="empty-chart">데이터 없음</div>`;
+    $("chartSubtitle").textContent = "분석 결과가 나오면 회사별 지표를 비교합니다.";
+    return;
+  }
+
+  rows.sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+  const visibleRows = rows.slice(0, 12);
+  const maxAbs = Math.max(...visibleRows.map((item) => Math.abs(item.value)), 1);
+  $("chartSubtitle").textContent = `${state.labels[metric] || metric} 기준 상위 ${visibleRows.length}개`;
+
+  for (const item of visibleRows) {
+    const percent = Math.max(2, Math.round((Math.abs(item.value) / maxAbs) * 100));
+    const line = document.createElement("div");
+    line.className = "chart-row";
+    const name = document.createElement("div");
+    name.className = "chart-name";
+    name.textContent = item.row.corp_name || "";
+    const track = document.createElement("div");
+    track.className = "chart-track";
+    const bar = document.createElement("div");
+    bar.className = `chart-bar ${item.value < 0 ? "negative" : ""}`;
+    bar.style.width = `${percent}%`;
+    track.appendChild(bar);
+    const value = document.createElement("div");
+    value.className = "chart-value";
+    value.textContent = formatCell(item.value, metric);
+    line.append(name, track, value);
+    chartBody.appendChild(line);
+  }
+}
+
+function chartValue(row, metric) {
+  if (metric === "operating_revenue") {
+    return numeric(row.operating_revenue ?? row.operating_revenue_estimate);
+  }
+  return numeric(row[metric]);
+}
+
+function numeric(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function downloadCurrentFile() {
+  const rows = currentRows();
+  const columns = currentColumns().filter((column) => column !== "pdf");
+  if (!rows.length) return;
+  const format = $("exportFormatSelect").value;
+  const name = `${state.activeView}_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "")}`;
+  const table = rows.map((row) => Object.fromEntries(columns.map((column) => [state.labels[column] || column, row[column] ?? ""])));
+
+  if (format === "json") {
+    downloadBlob(`${name}.json`, JSON.stringify(table, null, 2), "application/json;charset=utf-8");
+    return;
+  }
+  if (format === "md") {
+    downloadBlob(`${name}.md`, markdownTable(table), "text/markdown;charset=utf-8");
+    return;
+  }
+  if (format === "html" || format === "xls") {
+    const html = htmlTable(table);
+    const extension = format === "xls" ? "xls" : "html";
+    const type = format === "xls" ? "application/vnd.ms-excel;charset=utf-8" : "text/html;charset=utf-8";
+    downloadBlob(`${name}.${extension}`, html, type);
+    return;
+  }
+
+  const delimiter = format === "tsv" ? "\t" : ",";
+  const extension = format === "tsv" ? "tsv" : "csv";
+  const type = format === "tsv" ? "text/tab-separated-values;charset=utf-8" : "text/csv;charset=utf-8";
+  downloadBlob(`${name}.${extension}`, delimitedTable(table, delimiter), type);
+}
+
+function delimitedTable(rows, delimiter) {
+  if (!rows.length) return "";
+  const headers = Object.keys(rows[0]);
+  const lines = [headers.map((value) => cellEscape(value, delimiter)).join(delimiter)];
+  for (const row of rows) {
+    lines.push(headers.map((header) => cellEscape(row[header], delimiter)).join(delimiter));
+  }
+  return `\ufeff${lines.join("\n")}`;
+}
+
+function markdownTable(rows) {
+  if (!rows.length) return "";
+  const headers = Object.keys(rows[0]);
+  const lines = [
+    `| ${headers.map(markdownEscape).join(" | ")} |`,
+    `| ${headers.map(() => "---").join(" | ")} |`
+  ];
+  for (const row of rows) {
+    lines.push(`| ${headers.map((header) => markdownEscape(row[header] ?? "")).join(" | ")} |`);
+  }
+  return lines.join("\n");
+}
+
+function htmlTable(rows) {
+  if (!rows.length) return "<table></table>";
+  const headers = Object.keys(rows[0]);
+  const head = `<tr>${headers.map((header) => `<th>${htmlEscape(header)}</th>`).join("")}</tr>`;
+  const body = rows.map((row) => `<tr>${headers.map((header) => `<td>${htmlEscape(row[header] ?? "")}</td>`).join("")}</tr>`).join("\n");
+  return `<!doctype html><meta charset="utf-8"><table>${head}${body}</table>`;
+}
+
+function downloadBlob(fileName, content, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  downloadUrl(url, fileName);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function downloadUrl(url, fileName = "") {
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = fileName;
+  if (fileName) anchor.download = fileName;
   anchor.rel = "noopener";
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
 }
 
-function downloadCurrentCsv() {
-  const rows = currentRows();
-  const columns = currentColumns();
-  if (!rows.length) return;
-  const header = columns.filter((column) => column !== "pdf").map((column) => state.labels[column] || column);
-  const lines = [header.map(csvEscape).join(",")];
-  for (const row of rows) {
-    lines.push(columns.filter((column) => column !== "pdf").map((column) => csvEscape(row[column] ?? "")).join(","));
-  }
-  const blob = new Blob(["\ufeff", lines.join("\n")], { type: "text/csv;charset=utf-8" });
-  const anchor = document.createElement("a");
-  anchor.href = URL.createObjectURL(blob);
-  anchor.download = `${state.activeView}_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "")}.csv`;
-  document.body.appendChild(anchor);
-  anchor.click();
-  URL.revokeObjectURL(anchor.href);
-  anchor.remove();
-}
-
 async function apiGet(path) {
-  const response = await fetch(path, { headers: apiHeaders() });
+  const response = await fetch(path);
   return parseJsonResponse(response);
 }
 
 async function apiPost(path, body) {
   const response = await fetch(path, {
     method: "POST",
-    headers: { "content-type": "application/json", ...apiHeaders() },
+    headers: { "content-type": "application/json" },
     body: JSON.stringify(body)
   });
   return parseJsonResponse(response);
@@ -276,11 +438,6 @@ async function parseJsonResponse(response) {
     throw new Error(data.error || `HTTP ${response.status}`);
   }
   return data;
-}
-
-function apiHeaders() {
-  const key = $("apiKeyInput").value.trim();
-  return key ? { "x-dart-api-key": key } : {};
 }
 
 function parseYears(value) {
@@ -300,7 +457,7 @@ function switchView(view) {
   document.querySelectorAll(".tab").forEach((button) => button.classList.toggle("is-active", button.dataset.view === view));
   $("analysisView").classList.toggle("is-active", view === "analysis");
   $("filingsView").classList.toggle("is-active", view === "filings");
-  $("downloadCsvButton").disabled = !currentRows().length;
+  $("exportButton").disabled = !currentRows().length;
 }
 
 function currentRows() {
@@ -314,7 +471,7 @@ function currentColumns() {
 function setBusy(busy) {
   $("analyzeButton").disabled = busy;
   $("filingsButton").disabled = busy;
-  $("downloadCsvButton").disabled = busy || !currentRows().length;
+  $("exportButton").disabled = busy || !currentRows().length;
 }
 
 function setStatus(message, isError = false) {
@@ -336,9 +493,22 @@ function isRatioColumn(column) {
   return column.includes("margin") || column.includes("yoy") || column === "roe" || column === "debt_ratio";
 }
 
-function csvEscape(value) {
-  const text = String(value);
-  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+function cellEscape(value, delimiter) {
+  const text = String(value ?? "");
+  const needsQuote = delimiter === "," ? /[",\n\r]/.test(text) : /[\t\n\r]/.test(text);
+  return needsQuote ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function markdownEscape(value) {
+  return String(value ?? "").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+}
+
+function htmlEscape(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function sanitizeFileName(value) {
